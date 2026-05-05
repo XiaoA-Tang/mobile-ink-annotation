@@ -25,12 +25,12 @@ The Basic Edition provides all the essential tools you need for handwriting and 
 *Once the plugin is approved in the official directory:*
 1. Open Obsidian **Settings** -> **Community Plugins**.
 2. Turn off Safe Mode.
-3. Click **Browse** and search for **"Mobile Ink Annotation Basic"**.
+3. Click **Browse** and search for **"Mobile Ink Annotation"**.
 4. Click **Install**, then **Enable** the plugin.
 
 ### Option 2: Manual Installation
-1. Download the latest release `.zip` file from the [Releases](https://github.com/YOUR_GITHUB_USERNAME/mobile-ink-annotation-basic/releases) page.
-2. Extract the folder and place it in your vault's plugin folder: `<vault>/.obsidian/plugins/mobile-ink-annotation-basic/`.
+1. Download the latest release `.zip` file from the [Releases](https://github.com/jepicaju862-lab/mobile-ink-annotation/releases) page.
+2. Extract the folder and place it in your vault's plugin folder: `<vault>/.obsidian/plugins/mobile-ink-annotation/`.
 3. Reload Obsidian.
 4. Go to **Settings** -> **Community Plugins** and enable the plugin.
 
@@ -41,7 +41,7 @@ The Basic Edition provides all the essential tools you need for handwriting and 
 4. Click the **Save** icon to commit your handwriting into the document.
 
 ## 🤝 Support & Feedback
-If you encounter any issues or have feature requests, please open an issue on the [GitHub repository](https://github.com/YOUR_GITHUB_USERNAME/mobile-ink-annotation-basic/issues).
+If you encounter any issues or have feature requests, please open an issue on the [GitHub repository]([https://github.com/YOUR_GITHUB_USERNAME/mobile-ink-annotation-basic/issues](https://github.com/jepicaju862-lab/mobile-ink-annotation/issues)).
 
 ## 📄 License
 MIT License
