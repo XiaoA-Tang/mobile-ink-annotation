@@ -56,7 +56,7 @@
 
 ### 选项 2：手动安装
 
-1. 从 [Releases]([https://github.com/YOUR_GITHUB_USERNAME/mobile-ink-annotation-basic/releases](https://github.com/jepicaju862-lab/mobile-ink-annotation/releases)) 页面下载最新版本的 `.zip` 文件。
+1. 从 [Releases](https://github.com/jepicaju862-lab/mobile-ink-annotation/releases)页面下载最新版本的 `.zip` 文件。
 
 2. 解压该文件夹并将其放置在你的笔记库 (vault) 插件目录中：`<vault>/.obsidian/plugins/mobile-ink-annotation/`。
 
@@ -80,7 +80,7 @@
 
 ## 🤝 支持与反馈
 
-如果你遇到任何问题或有新功能建议，请在 [GitHub 仓库]([https://github.com/YOUR_GITHUB_USERNAME/mobile-ink-annotation-basic/issues](https://github.com/jepicaju862-lab/mobile-ink-annotation/issues)) 中提交 Issue。
+如果你遇到任何问题或有新功能建议，请在 [GitHub 仓库](https://github.com/jepicaju862-lab/mobile-ink-annotation/issues) 中提交 Issue。
 
 
 
