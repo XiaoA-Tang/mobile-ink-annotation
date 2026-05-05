@@ -41,7 +41,7 @@ The Basic Edition provides all the essential tools you need for handwriting and 
 4. Click the **Save** icon to commit your handwriting into the document.
 
 ## 🤝 Support & Feedback
-If you encounter any issues or have feature requests, please open an issue on the [GitHub repository]([https://github.com/YOUR_GITHUB_USERNAME/mobile-ink-annotation-basic/issues](https://github.com/jepicaju862-lab/mobile-ink-annotation/issues)).
+If you encounter any issues or have feature requests, please open an issue on the [GitHub repository](https://github.com/jepicaju862-lab/mobile-ink-annotation/issues).
 
 ## 📄 License
 MIT License
