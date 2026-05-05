@@ -1,3 +1,5 @@
+[![English](https://img.shields.io/badge/Language-English-blue)](README.md)
+[![简体中文](https://img.shields.io/badge/Language-简体中文-red)](README.zh-CN.md)
 # Mobile Ink Annotation
 A mobile-first handwritten annotation plugin for Obsidian. This plugin allows you to draw and annotate directly over your Markdown notes and PDF files using your Apple Pencil or stylus.
 
