@@ -1,0 +1,2 @@
+# ob
+Obsidian plugins
