@@ -83,8 +83,11 @@
 如果你遇到任何问题或有新功能建议，请在 [GitHub 仓库](https://github.com/jepicaju862-lab/mobile-ink-annotation/issues) 中提交 Issue。
 
 
-
 ## 📄 许可证
 
 MIT License
 
+## 📬 联系我
+
+如果您在使用过程中有任何问题、功能建议，或者想与其他用户探讨交流，也欢迎通过以下方式联系我：
+- **QQ 交流群**: `1098621587` (欢迎加群反馈 Bug 或交流使用心得)
