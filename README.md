@@ -45,3 +45,8 @@ If you encounter any issues or have feature requests, please open an issue on th
 
 ## 📄 License
 MIT License
+## 📬 Contact Me
+If you have any questions, suggestions, or just want to discuss the plugin, feel free to reach out through the following channels:
+
+- **QQ Group**: `1098621587` (Welcome to join our QQ group for discussions, bug reports, and updates!)
+
