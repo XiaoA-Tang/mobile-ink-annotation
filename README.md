@@ -117,7 +117,7 @@ Because these files live inside your vault, they sync and back up along with eve
 ## Feedback and support
 
 - **Email** — [jepicaju862@gmail.com](mailto:jepicaju862@gmail.com). Best for bug reports; please include your Obsidian version, platform (iOS / Android / desktop), and whether the note being annotated is Markdown or PDF.
-- **QQ group** — `QQ_GROUP_PLACEHOLDER` — for usage questions, tips and release announcements.
+- **QQ group** — `1094620986` — for usage questions, tips and release announcements.
 
 ## Pro version
 
@@ -254,7 +254,7 @@ npm run build
 ## 反馈与支持
 
 - **邮箱** —— [jepicaju862@gmail.com](mailto:jepicaju862@gmail.com)。提交问题时，请附上 Obsidian 版本、所用平台（iOS / Android / 桌面端），以及被批注的是 Markdown 还是 PDF。
-- **QQ 群** —— `QQ_GROUP_PLACEHOLDER` —— 用于使用交流、技巧分享和版本更新通知。
+- **QQ 群** —— `1094620986` —— 用于使用交流、技巧分享和版本更新通知。
 
 ## Pro 版本
 
