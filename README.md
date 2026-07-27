@@ -143,7 +143,7 @@ This applies to the Basic edition in this repository. Mobile Ink Annotation Pro 
 
 在 Markdown 笔记和 PDF 上直接手写、圈画、标重点，笔迹叠加在内容之上，**不会改写源文件**。所有手写内容都作为独立的批注数据保存，笔记和 PDF 原文保持不变。
 
-[English](#mobile-ink-annotation-basic) · **简体中文**
+[English](#mobile-ink-annotation) · **简体中文**
 
 ## 核心特性
 
