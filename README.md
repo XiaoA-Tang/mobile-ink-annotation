@@ -1,4 +1,4 @@
-# Mobile Ink Annotation Basic
+# Mobile Ink Annotation
 
 Handwritten annotation for Obsidian, built for phones, tablets and styluses.
 
