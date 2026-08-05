@@ -87,12 +87,32 @@ export default class MobileInkAnnotationPlugin extends Plugin {
     this.app.workspace.revealLeaf(leaf);
   }
 
+  private findLeafWithFile(file: TFile): WorkspaceLeaf | null {
+    let found: WorkspaceLeaf | null = null;
+    this.app.workspace.iterateAllLeaves((leaf) => {
+      if (found) return;
+      const viewState = leaf.getViewState();
+      const state = (viewState.state ?? {}) as { file?: unknown; sourcePath?: unknown };
+      const statePath = typeof state.sourcePath === "string"
+        ? state.sourcePath
+        : typeof state.file === "string"
+          ? state.file
+          : "";
+      const leafFile = (leaf.view as { file?: unknown }).file;
+      const leafFilePath = leafFile instanceof TFile ? leafFile.path : "";
+      if (statePath === file.path || leafFilePath === file.path) {
+        found = leaf;
+      }
+    });
+    return found;
+  }
+
   private async openPdfWithAnnotationByDefaultIfNeeded(file: TFile | null): Promise<void> {
     if (!this.settings.openPdfWithAnnotationByDefault) return;
     if (!(file instanceof TFile) || file.extension !== "pdf") return;
     if (this.defaultPdfOpenPath === file.path) return;
 
-    const leaf = this.app.workspace.activeLeaf;
+    const leaf = this.findLeafWithFile(file) ?? this.app.workspace.activeLeaf;
     if (!leaf) return;
 
     const viewState = leaf.getViewState();
