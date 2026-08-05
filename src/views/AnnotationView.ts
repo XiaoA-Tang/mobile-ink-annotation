@@ -784,6 +784,7 @@ export class AnnotationView extends FileView {
         }
       }
       this.restoreSavedPosition();
+      this.setBrowseMode(true);
       this.refreshToolbarState();
     } finally {
       this.rendering = false;
