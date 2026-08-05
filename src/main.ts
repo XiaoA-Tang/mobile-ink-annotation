@@ -121,6 +121,13 @@ export default class MobileInkAnnotationPlugin extends Plugin {
     return statePath === file.path || leafFilePath === file.path;
   }
 
+  private isPdfViewLoaded(leaf: WorkspaceLeaf | null): boolean {
+    if (!leaf || leaf.getViewState().type !== "pdf") return false;
+    const el = leaf.view.containerEl;
+    if (!el) return false;
+    return !!el.querySelector(".pdf-view, canvas, .pdf-embed, embed");
+  }
+
   private async openPdfWithAnnotationByDefaultIfNeeded(file: TFile | null): Promise<boolean> {
     if (!this.settings.openPdfWithAnnotationByDefault) return true;
     if (!(file instanceof TFile) || file.extension !== "pdf") return true;
@@ -130,19 +137,19 @@ export default class MobileInkAnnotationPlugin extends Plugin {
     console.log("[mobile-ink] openPdfIfNeeded", {
       file: file.path,
       leafType: leaf?.getViewState().type,
-      showingFile: leaf ? this.isLeafShowingFile(leaf, file) : false
+      showingFile: leaf ? this.isLeafShowingFile(leaf, file) : false,
+      pdfLoaded: this.isPdfViewLoaded(leaf)
     });
     if (!leaf || !this.isLeafShowingFile(leaf, file)) return false;
+    if (!this.isPdfViewLoaded(leaf)) return false;
 
     if (leaf.getViewState().type === VIEW_TYPE_MOBILE_INK) return true;
 
     this.defaultPdfOpenPath = file.path;
     try {
       console.log("[mobile-ink] switching leaf to annotation view");
-      new Notice("标注视图切换中...");
       await this.openInkForFile(file, leaf);
       console.log("[mobile-ink] switch done");
-      new Notice("标注视图切换完成");
     } catch (e) {
       console.error("[mobile-ink] switch FAILED", e);
       new Notice("标注视图切换失败: " + String(e));
@@ -160,21 +167,20 @@ export default class MobileInkAnnotationPlugin extends Plugin {
     if (!(file instanceof TFile) || file.extension !== "pdf") return;
 
     let attempts = 0;
-    const maxAttempts = 30;
+    const maxAttempts = 120;
     const retry = (): void => {
       void this.openPdfWithAnnotationByDefaultIfNeeded(file)
         .then((done) => {
           console.log("[mobile-ink] poll attempt", attempts, "done=", done);
           if (done || attempts >= maxAttempts) {
             if (!done) {
-              const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_MOBILE_INK).length;
-              const active = this.app.workspace.activeLeaf?.getViewState().type;
-              new Notice("标注自动切换失败: 未找到PDF视图 (标注视图数=" + leaves + ", active=" + active + ")");
+              const leaf = this.findLeafWithFile(file) ?? this.app.workspace.activeLeaf;
+              new Notice("标注自动切换失败: PDF未加载完成 (type=" + leaf?.getViewState().type + ", loaded=" + this.isPdfViewLoaded(leaf) + ")");
             }
             return;
           }
           attempts += 1;
-          window.setTimeout(retry, 120);
+          window.setTimeout(retry, 200);
         })
         .catch(() => {});
     };
