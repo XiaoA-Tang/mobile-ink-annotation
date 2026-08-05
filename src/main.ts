@@ -76,28 +76,7 @@ export default class MobileInkAnnotationPlugin extends Plugin {
   }
 
   async openInkForFile(file: TFile, leaf: WorkspaceLeaf = this.app.workspace.getLeaf(true)): Promise<void> {
-    const currentState = leaf.getViewState();
-    const currentType = currentState.type;
-
-    if (currentType === VIEW_TYPE_MOBILE_INK) {
-      await leaf.setViewState({
-        type: VIEW_TYPE_MOBILE_INK,
-        active: true,
-        state: {
-          file: file.path,
-          sourcePath: file.path
-        }
-      });
-      this.app.workspace.revealLeaf(leaf);
-      return;
-    }
-
-    if (currentType === "pdf" || currentType === "markdown") {
-      leaf.detach();
-    }
-
-    const targetLeaf = this.app.workspace.getLeaf(false);
-    await targetLeaf.setViewState({
+    await leaf.setViewState({
       type: VIEW_TYPE_MOBILE_INK,
       active: true,
       state: {
@@ -105,7 +84,7 @@ export default class MobileInkAnnotationPlugin extends Plugin {
         sourcePath: file.path
       }
     });
-    this.app.workspace.revealLeaf(targetLeaf);
+    this.app.workspace.revealLeaf(leaf);
   }
 
   private async openPdfWithAnnotationByDefaultIfNeeded(file: TFile | null): Promise<void> {
