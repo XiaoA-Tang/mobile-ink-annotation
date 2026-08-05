@@ -15,6 +15,7 @@ Write, highlight and mark up your Markdown notes and PDFs with a pen, exactly wh
 - **PDF text annotation** — switch to text-selection mode to copy selected text, or add **highlight**, **underline**, **strikethrough** and **note** annotations, each with its own color.
 - **Stylus-first input model** — a pen or mouse writes; a finger scrolls and pans the page. No palm-rejection gymnastics needed.
 - **Draggable, collapsible toolbar** — move it wherever your hand rests, or collapse it into a single floating button. The position is remembered.
+- **Reading position memory** — for each file, your place is remembered: the current page when reading a PDF and the scroll position when reading Markdown. Reopening the annotation view brings you back exactly where you left off, even after restarting Obsidian.
 - **Automatic saving** — strokes are written asynchronously shortly after you stop drawing, and flushed when you close the view.
 - **Works offline** — no account, no network access, no telemetry.
 
@@ -105,6 +106,8 @@ Annotations are stored **outside** your notes, in the plugin's own folder:
 
 Each annotated source file gets one `.ink.json` file there, named after the source file plus a short hash of its path. The file holds the strokes, the layout snapshot used to position them, and any PDF text annotations.
 
+Reading positions are kept in the plugin's own settings file (`data.json`), so they follow your vault too.
+
 Because these files live inside your vault, they sync and back up along with everything else — but if you move your vault or reinstall the plugin manually, remember to carry the `annotations/` folder with you.
 
 ## Known limitations
@@ -133,6 +136,14 @@ Licensed under the **GNU General Public License, version 3 or later (GPL-3.0-or-
 
 This applies to the Basic edition in this repository. Mobile Ink Annotation Pro is a separate, independently built commercial product and is not covered by this license.
 
+### Fork notice
+
+This repository is a fork of [`jepicaju862-lab/mobile-ink-annotation`](https://github.com/jepicaju862-lab/mobile-ink-annotation). Changes made on top of the upstream code:
+
+- Added reading position memory (PDF page / Markdown scroll position, persisted across restarts).
+
+The copyright of the original work remains with its original authors, and the original license terms continue to apply to all modifications, as required by the GNU GPL.
+
 ---
 
 <a id="简体中文"></a>
@@ -152,6 +163,7 @@ This applies to the Basic edition in this repository. Mobile Ink Annotation Pro 
 - **PDF 文本批注** —— 切换到文本选择模式后，可复制选中文本，或添加**高亮**、**下划线**、**删除线**和**批注**，每种类型都有独立配色。
 - **触控笔优先** —— 触控笔或鼠标用于书写，手指用于滚动和拖动画布，不必反复关闭手掌误触。
 - **可拖动、可收起的工具栏** —— 拖到顺手的位置，或收起成一个悬浮按钮；位置会被记住。
+- **阅读位置记忆** —— 按文件记住阅读进度：PDF 记住当前页码，Markdown 记住滚动位置。重新打开批注视图时会精确回到上次离开的位置，重启 Obsidian 也不丢失。
 - **自动保存** —— 停笔后短暂延迟即异步写入，关闭视图时强制落盘。
 - **完全离线** —— 无需账号，不联网，不收集任何使用数据。
 
@@ -242,6 +254,8 @@ npm run build
 
 每个被批注的源文件对应一个 `.ink.json` 文件，文件名由源文件名加上路径哈希构成，其中保存笔迹、用于定位笔迹的版面快照，以及 PDF 文本批注。
 
+阅读位置记录保存在插件自身的设置文件 `data.json` 中，会随库一并保留。
+
 这些文件位于库内，因此可以随库一起同步和备份；但如果你迁移库或手动重装插件，请记得一并保留 `annotations/` 目录。
 
 ## 已知限制
@@ -269,3 +283,11 @@ npm run build
 本项目采用 **GNU 通用公共许可证第 3 版或更高版本（GPL-3.0-or-later）** 授权，完整条款见 [LICENSE](LICENSE)。
 
 该协议适用于本仓库中的基础版。Mobile Ink Annotation Pro 为独立构建的商业产品，不在本协议覆盖范围内。
+
+### Fork 声明
+
+本仓库是 [`jepicaju862-lab/mobile-ink-annotation`](https://github.com/jepicaju862-lab/mobile-ink-annotation) 的 fork。在上游代码基础上的修改包括：
+
+- 新增阅读位置记忆（PDF 页码 / Markdown 滚动位置，重启后仍可恢复）。
+
+原始代码的著作权归原作者所有；根据 GNU GPL 要求，原许可证条款同样适用于全部修改内容。
