@@ -107,14 +107,7 @@ export default class MobileInkAnnotationPlugin extends Plugin {
     return found;
   }
 
-  private async openPdfWithAnnotationByDefaultIfNeeded(file: TFile | null): Promise<void> {
-    if (!this.settings.openPdfWithAnnotationByDefault) return;
-    if (!(file instanceof TFile) || file.extension !== "pdf") return;
-    if (this.defaultPdfOpenPath === file.path) return;
-
-    const leaf = this.findLeafWithFile(file) ?? this.app.workspace.activeLeaf;
-    if (!leaf) return;
-
+  private isLeafShowingFile(leaf: WorkspaceLeaf, file: TFile): boolean {
     const viewState = leaf.getViewState();
     const state = (viewState.state ?? {}) as { file?: unknown; sourcePath?: unknown };
     const statePath = typeof state.sourcePath === "string"
@@ -122,18 +115,20 @@ export default class MobileInkAnnotationPlugin extends Plugin {
       : typeof state.file === "string"
         ? state.file
         : "";
-    const activeFile = this.app.workspace.getActiveFile();
-    const activePath = activeFile instanceof TFile ? activeFile.path : "";
     const leafFile = (leaf.view as { file?: unknown }).file;
     const leafFilePath = leafFile instanceof TFile ? leafFile.path : "";
+    return statePath === file.path || leafFilePath === file.path;
+  }
 
-    if (viewState.type === VIEW_TYPE_MOBILE_INK && statePath === file.path) return;
+  private async openPdfWithAnnotationByDefaultIfNeeded(file: TFile | null): Promise<boolean> {
+    if (!this.settings.openPdfWithAnnotationByDefault) return true;
+    if (!(file instanceof TFile) || file.extension !== "pdf") return true;
+    if (this.defaultPdfOpenPath === file.path) return true;
 
-    const leafLooksRelatedToFile = activePath === file.path
-      || leafFilePath === file.path
-      || statePath === file.path
-      || viewState.type === VIEW_TYPE_MOBILE_INK;
-    if (!leafLooksRelatedToFile) return;
+    const leaf = this.findLeafWithFile(file) ?? this.app.workspace.activeLeaf;
+    if (!leaf || !this.isLeafShowingFile(leaf, file)) return false;
+
+    if (leaf.getViewState().type === VIEW_TYPE_MOBILE_INK) return true;
 
     this.defaultPdfOpenPath = file.path;
     try {
@@ -145,16 +140,24 @@ export default class MobileInkAnnotationPlugin extends Plugin {
         }
       }, 0);
     }
+    return true;
   }
 
   private queueOpenPdfWithAnnotationByDefault(file: TFile | null): void {
     if (!(file instanceof TFile) || file.extension !== "pdf") return;
 
-    for (const delay of [0, 80, 240]) {
-      window.setTimeout(() => {
-        void this.openPdfWithAnnotationByDefaultIfNeeded(file);
-      }, delay);
-    }
+    let attempts = 0;
+    const maxAttempts = 30;
+    const retry = (): void => {
+      void this.openPdfWithAnnotationByDefaultIfNeeded(file)
+        .then((done) => {
+          if (done || attempts >= maxAttempts) return;
+          attempts += 1;
+          window.setTimeout(retry, 120);
+        })
+        .catch(() => {});
+    };
+    retry();
   }
 
   openActivePdfWithAnnotationIfEnabled(): void {
