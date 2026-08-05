@@ -32,6 +32,7 @@ export default class MobileInkAnnotationPlugin extends Plugin {
     );
 
     this.registerEvent(this.app.workspace.on("file-open", (file) => {
+      console.log("[mobile-ink] file-open event", file?.path);
       this.queueOpenPdfWithAnnotationByDefault(file);
     }));
 
@@ -126,13 +127,25 @@ export default class MobileInkAnnotationPlugin extends Plugin {
     if (this.defaultPdfOpenPath === file.path) return true;
 
     const leaf = this.findLeafWithFile(file) ?? this.app.workspace.activeLeaf;
+    console.log("[mobile-ink] openPdfIfNeeded", {
+      file: file.path,
+      leafType: leaf?.getViewState().type,
+      showingFile: leaf ? this.isLeafShowingFile(leaf, file) : false
+    });
     if (!leaf || !this.isLeafShowingFile(leaf, file)) return false;
 
     if (leaf.getViewState().type === VIEW_TYPE_MOBILE_INK) return true;
 
     this.defaultPdfOpenPath = file.path;
     try {
+      console.log("[mobile-ink] switching leaf to annotation view");
+      new Notice("标注视图切换中...");
       await this.openInkForFile(file, leaf);
+      console.log("[mobile-ink] switch done");
+      new Notice("标注视图切换完成");
+    } catch (e) {
+      console.error("[mobile-ink] switch FAILED", e);
+      new Notice("标注视图切换失败: " + String(e));
     } finally {
       window.setTimeout(() => {
         if (this.defaultPdfOpenPath === file.path) {
@@ -151,7 +164,15 @@ export default class MobileInkAnnotationPlugin extends Plugin {
     const retry = (): void => {
       void this.openPdfWithAnnotationByDefaultIfNeeded(file)
         .then((done) => {
-          if (done || attempts >= maxAttempts) return;
+          console.log("[mobile-ink] poll attempt", attempts, "done=", done);
+          if (done || attempts >= maxAttempts) {
+            if (!done) {
+              const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_MOBILE_INK).length;
+              const active = this.app.workspace.activeLeaf?.getViewState().type;
+              new Notice("标注自动切换失败: 未找到PDF视图 (标注视图数=" + leaves + ", active=" + active + ")");
+            }
+            return;
+          }
           attempts += 1;
           window.setTimeout(retry, 120);
         })
