@@ -1,5 +1,6 @@
 import { App, FileView, loadPdfJs, MarkdownRenderer, Menu, Modal, normalizePath, Notice, setIcon, Setting, TFile, WorkspaceLeaf, ViewStateResult } from "obsidian";
 import type MobileInkAnnotationPlugin from "../main";
+import type { SavedFilePosition } from "../main";
 import { STANDALONE_INK_EXTENSION, VIEW_TYPE_MOBILE_INK } from "../constants";
 import { InkEngine } from "../ink/InkEngine";
 import type { InkController } from "../ink/InkController";
@@ -477,6 +478,11 @@ export class AnnotationView extends FileView {
   }
 
   async onClose(): Promise<void> {
+    if (this.positionSaveTimer !== null) {
+      window.clearTimeout(this.positionSaveTimer);
+      this.positionSaveTimer = null;
+    }
+    await this.savePosition();
     await this.flushCurrentWork();
     this.detachPdfLazyRenderer();
     this.detachPdfPageNavigator();
@@ -488,6 +494,46 @@ export class AnnotationView extends FileView {
     this.removeToolbarOutsideDismiss();
     this.engine?.destroy();
     this.engine = null;
+  }
+
+  private positionSaveTimer: number | null = null;
+
+  private scheduleSavePosition(): void {
+    if (this.positionSaveTimer !== null) {
+      window.clearTimeout(this.positionSaveTimer);
+    }
+    this.positionSaveTimer = window.setTimeout(() => {
+      this.positionSaveTimer = null;
+      void this.savePosition();
+    }, 800);
+  }
+
+  private async savePosition(): Promise<void> {
+    const path = this.sourcePath;
+    if (!path || !this.scrollEl) return;
+
+    const pos: SavedFilePosition = this.isPdfPath(path)
+      ? { kind: "pdf", page: this.pdfPageNavigator.getCurrentPageNumber() }
+      : { kind: "markdown", scrollTop: this.scrollEl.scrollTop };
+
+    if (!this.plugin.settings.savedPositions) {
+      this.plugin.settings.savedPositions = {};
+    }
+    this.plugin.settings.savedPositions[path] = pos;
+    await this.plugin.saveSettings();
+  }
+
+  private restoreSavedPosition(): void {
+    const path = this.sourcePath;
+    if (!path || !this.scrollEl) return;
+    const saved = this.plugin.settings.savedPositions?.[path];
+    if (!saved) return;
+
+    if (saved.kind === "pdf" && this.isPdfPath(path)) {
+      this.goToPdfPage(saved.page);
+    } else if (saved.kind === "markdown" && !this.isPdfPath(path)) {
+      this.scrollEl.scrollTo(0, saved.scrollTop);
+    }
   }
 
   private async flushCurrentWork(): Promise<void> {
@@ -727,6 +773,7 @@ export class AnnotationView extends FileView {
           this.engine.loadStrokes(strokes);
         }
       }
+      this.restoreSavedPosition();
       this.refreshToolbarState();
     } finally {
       this.rendering = false;
@@ -2209,6 +2256,7 @@ export class AnnotationView extends FileView {
 
     this.hidePdfTextMenu();
     this.hidePdfAnnotationMenu();
+    this.scheduleSavePosition();
   };
 
   private onPdfBlankPointerDown = (event: PointerEvent): void => {
