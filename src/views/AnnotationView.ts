@@ -424,6 +424,11 @@ export class AnnotationView extends FileView {
   async setState(state: AnnotationViewState, result: ViewStateResult): Promise<void> {
     const nextSourcePath = state.sourcePath ?? state.file ?? this.file?.path ?? "";
     if (nextSourcePath && nextSourcePath !== this.sourcePath) {
+      if (this.positionSaveTimer !== null) {
+        window.clearTimeout(this.positionSaveTimer);
+        this.positionSaveTimer = null;
+      }
+      await this.savePosition();
       await this.flushCurrentWork();
     }
 
@@ -450,6 +455,11 @@ export class AnnotationView extends FileView {
 
   async onLoadFile(file: TFile): Promise<void> {
     if (file.path !== this.sourcePath) {
+      if (this.positionSaveTimer !== null) {
+        window.clearTimeout(this.positionSaveTimer);
+        this.positionSaveTimer = null;
+      }
+      await this.savePosition();
       await this.flushCurrentWork();
     }
 
