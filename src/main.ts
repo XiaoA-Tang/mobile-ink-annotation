@@ -3,12 +3,18 @@ import { StrokeStore } from "./ink/StrokeStore";
 import { AnnotationView } from "./views/AnnotationView";
 import { VIEW_TYPE_MOBILE_INK } from "./constants";
 
+export type SavedFilePosition =
+  | { kind: "pdf"; page: number }
+  | { kind: "markdown"; scrollTop: number };
+
 type MobileInkAnnotationSettings = {
   openPdfWithAnnotationByDefault: boolean;
+  savedPositions: Record<string, SavedFilePosition>;
 };
 
 const DEFAULT_SETTINGS: MobileInkAnnotationSettings = {
-  openPdfWithAnnotationByDefault: false
+  openPdfWithAnnotationByDefault: false,
+  savedPositions: {}
 };
 
 export default class MobileInkAnnotationPlugin extends Plugin {
