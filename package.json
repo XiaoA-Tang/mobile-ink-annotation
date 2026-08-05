@@ -1,0 +1,21 @@
+{
+  "name": "obsidian-mobile-ink-annotation",
+  "version": "1.0.5",
+  "description": "Mobile-first handwritten annotation plugin for Obsidian.",
+  "main": "main.js",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production"
+  },
+  "keywords": ["obsidian", "plugin", "ink", "annotation", "pencil", "mobile"],
+  "author": "ChatGPT",
+  "license": "GPL-3.0-or-later",
+  "devDependencies": {
+    "@types/node": "^20.11.30",
+    "builtin-modules": "^3.3.0",
+    "esbuild": "^0.20.2",
+    "obsidian": "latest",
+    "pdfjs-dist": "^5.7.284",
+    "typescript": "^5.4.5"
+  }
+}
