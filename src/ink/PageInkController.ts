@@ -1,4 +1,5 @@
 import { InkEngine } from "./InkEngine";
+import { resolveInkCanvasBudget } from "./inkBudget";
 import type { InkController } from "./InkController";
 import type { InkStroke, InkToolState } from "./types";
 
@@ -520,9 +521,7 @@ export class PageInkController implements InkController {
   }
 
   private getInkCanvasMaxPixels(): number {
-    return window.innerWidth <= 820 || window.matchMedia?.("(pointer: coarse)").matches === true
-      ? 72_000_000
-      : 144_000_000;
+    return resolveInkCanvasBudget(window.innerWidth <= 820 || window.matchMedia?.("(pointer: coarse)").matches === true);
   }
 }
 

@@ -3,6 +3,7 @@ import type MobileInkAnnotationPlugin from "../main";
 import type { SavedFilePosition } from "../main";
 import { STANDALONE_INK_EXTENSION, VIEW_TYPE_MOBILE_INK } from "../constants";
 import { InkEngine } from "../ink/InkEngine";
+import { resolveInkCanvasBudget } from "../ink/inkBudget";
 import type { InkController } from "../ink/InkController";
 import { PageInkController, type PageInkDescriptor } from "../ink/PageInkController";
 import { SaveQueue } from "../ink/SaveQueue";
@@ -743,7 +744,7 @@ export class AnnotationView extends FileView {
             : new InkEngine(live, committed, scroll, {
               initialToolState: this.createInitialInkToolState(),
               canvasMaxDpr: this.isMobileLike() ? 3 : 3.75,
-              canvasMaxPixels: this.isMobileLike() ? 48_000_000 : 96_000_000,
+              canvasMaxPixels: resolveInkCanvasBudget(this.isMobileLike()),
               onInputStart: () => this.enterInkInteractionMode(),
               onInputEnd: () => this.scheduleInkSharpDisplayScaleUpdate(),
               onChange: () => {
