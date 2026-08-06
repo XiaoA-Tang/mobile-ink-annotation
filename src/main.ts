@@ -32,7 +32,6 @@ export default class MobileInkAnnotationPlugin extends Plugin {
     );
 
     this.registerEvent(this.app.workspace.on("file-open", (file) => {
-      console.log("[mobile-ink] file-open event", file?.path);
       this.queueOpenPdfWithAnnotationByDefault(file);
     }));
 
@@ -134,12 +133,6 @@ export default class MobileInkAnnotationPlugin extends Plugin {
     if (this.defaultPdfOpenPath === file.path) return true;
 
     const leaf = this.findLeafWithFile(file) ?? this.app.workspace.activeLeaf;
-    console.log("[mobile-ink] openPdfIfNeeded", {
-      file: file.path,
-      leafType: leaf?.getViewState().type,
-      showingFile: leaf ? this.isLeafShowingFile(leaf, file) : false,
-      pdfLoaded: this.isPdfViewLoaded(leaf)
-    });
     if (!leaf || !this.isLeafShowingFile(leaf, file)) return false;
     if (!this.isPdfViewLoaded(leaf)) return false;
 
@@ -147,11 +140,8 @@ export default class MobileInkAnnotationPlugin extends Plugin {
 
     this.defaultPdfOpenPath = file.path;
     try {
-      console.log("[mobile-ink] switching leaf to annotation view");
       await this.openInkForFile(file, leaf);
-      console.log("[mobile-ink] switch done");
     } catch (e) {
-      console.error("[mobile-ink] switch FAILED", e);
       new Notice("标注视图切换失败: " + String(e));
     } finally {
       window.setTimeout(() => {
@@ -171,11 +161,9 @@ export default class MobileInkAnnotationPlugin extends Plugin {
     const retry = (): void => {
       void this.openPdfWithAnnotationByDefaultIfNeeded(file)
         .then((done) => {
-          console.log("[mobile-ink] poll attempt", attempts, "done=", done);
           if (done || attempts >= maxAttempts) {
             if (!done) {
-              const leaf = this.findLeafWithFile(file) ?? this.app.workspace.activeLeaf;
-              new Notice("标注自动切换失败: PDF未加载完成 (type=" + leaf?.getViewState().type + ", loaded=" + this.isPdfViewLoaded(leaf) + ")");
+              new Notice("标注自动切换失败: PDF未加载完成");
             }
             return;
           }
