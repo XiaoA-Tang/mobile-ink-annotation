@@ -51,29 +51,48 @@ export function clearCanvas(ctx: CanvasRenderingContext2D, width: number, height
 // Width Computation (Causal & Stable)
 // ---------------------------------------------------------------------------
 
-function computeWidths(points: InkPoint[], base: number): Float32Array {
-  const n = points.length;
-  const widths = new Float32Array(n);
-  let prevW = base * 0.5;
+// Per-stroke cached widths, keyed by the stroke object identity.
+// The stroke is mutated in place while it is being drawn (points appended),
+// so we track the computed length and only recompute newly appended points.
+const strokeWidthCache = new WeakMap<InkStroke, Float32Array>();
+const strokeSpeedCache = new WeakMap<InkStroke, number>();
 
-  for (let i = 0; i < n; i++) {
+function computeWidths(stroke: InkStroke, base: number, startIndex: number): Float32Array {
+  const points = stroke.points;
+  const n = points.length;
+  const cached = strokeWidthCache.get(stroke);
+
+  // Only recompute from startIndex (inclusive). Points before startIndex keep
+  // their previously computed widths, which is safe because the width formula
+  // is strictly causal (point i depends only on points 0..i).
+  if (cached && cached.length >= n && startIndex >= cached.length) {
+    return cached;
+  }
+
+  const widths = cached && cached.length >= startIndex ? cached : new Float32Array(n);
+  let prevW = startIndex > 0 ? widths[startIndex - 1] : base * 0.5;
+  let prevSpeed = startIndex > 0 ? (strokeSpeedCache.get(stroke) ?? 0) : 0;
+
+  for (let i = startIndex; i < n; i++) {
     const p = points[i];
     const next = i < n - 1 ? points[i + 1] : null;
 
-    // Realistic pressure mapping (0.4x to 1.2x)
-    // Relies on true hardware pressure. When pen is lifted, pressure naturally drops.
     const pr = Math.max(0, Math.min(1.0, p.pressure));
     const pFactor = 0.4 + pr * 0.8;
 
-    // Velocity mapping (fast strokes become slightly thinner)
+    // Velocity mapping with EMA smoothing: jittery event timestamps on some
+    // Android devices cause raw speed to spike and the stroke width to pulse.
     let vFactor = 1.0;
     if (next) {
       const dx = next.x - p.x;
       const dy = next.y - p.y;
       const dt = Math.max(1, next.t - p.t);
       const speed = Math.hypot(dx, dy) / dt;
-      vFactor = Math.max(0.8, 1.0 - speed * 0.015);
+      const smoothedSpeed = prevSpeed === 0 ? speed : prevSpeed * 0.65 + speed * 0.35;
+      prevSpeed = smoothedSpeed;
+      vFactor = Math.max(0.8, 1.0 - smoothedSpeed * 0.015);
     }
+    strokeSpeedCache.set(stroke, prevSpeed);
 
     let rawW = base * pFactor * vFactor;
 
@@ -88,8 +107,14 @@ function computeWidths(points: InkPoint[], base: number): Float32Array {
     widths[i] = i === 0 ? rawW : 0.6 * rawW + 0.4 * prevW;
     prevW = widths[i];
   }
-  
+
+  strokeWidthCache.set(stroke, widths);
   return widths;
+}
+
+export function clearStrokeWidthCache(stroke: InkStroke): void {
+  strokeWidthCache.delete(stroke);
+  strokeSpeedCache.delete(stroke);
 }
 
 // ---------------------------------------------------------------------------
@@ -112,8 +137,9 @@ function drawPen(ctx: CanvasRenderingContext2D, stroke: InkStroke, previousPoint
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
 
-  // Widths are strictly deterministic and causal.
-  const widths = computeWidths(points, stroke.width);
+  // Widths are strictly deterministic and causal. Incremental recompute avoids
+  // O(n^2) work for long strokes (this was the main source of lag).
+  const widths = computeWidths(stroke, stroke.width, Math.max(0, previousPointCount - 1));
 
   if (n === 1) {
     if (previousPointCount === 0) {

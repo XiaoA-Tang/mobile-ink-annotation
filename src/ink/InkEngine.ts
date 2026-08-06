@@ -856,6 +856,25 @@ export class InkEngine {
 
     const mapping = this.getCanvasPointMapping();
     const lastRealPoint = stroke.points[stroke.points.length - 1];
+
+    // Direction baseline from the last two real points. Predicted events that
+    // diverge wildly from the current motion (noisy on some Android styli) are
+    // dropped to avoid the "twitching tail" ahead of the nib.
+    const realBefore = stroke.points[stroke.points.length - 2];
+    let baseDx = 0;
+    let baseDy = 0;
+    let baseDirValid = false;
+    if (realBefore && lastRealPoint) {
+      baseDx = lastRealPoint.x - realBefore.x;
+      baseDy = lastRealPoint.y - realBefore.y;
+      const baseLen = Math.hypot(baseDx, baseDy);
+      baseDirValid = baseLen > 0.01;
+      if (baseDirValid) {
+        baseDx /= baseLen;
+        baseDy /= baseLen;
+      }
+    }
+
     const predictedPoints: InkPoint[] = [];
     let lastPoint = lastRealPoint;
 
@@ -870,6 +889,17 @@ export class InkEngine {
 
       const point = this.eventToPoint(predicted, Math.max(lastPoint.t + 0.001, performance.now()), mapping);
       if (distanceSquared(lastPoint, point) < MIN_POINT_DISTANCE_SQ) continue;
+
+      // Direction check: reject predictions that change heading too sharply.
+      if (baseDirValid) {
+        const dx = point.x - lastRealPoint.x;
+        const dy = point.y - lastRealPoint.y;
+        const len = Math.hypot(dx, dy);
+        if (len > 0.5) {
+          const dot = (dx / len) * baseDx + (dy / len) * baseDy;
+          if (dot < 0.45) continue;
+        }
+      }
 
       predictedPoints.push(point);
       lastPoint = point;

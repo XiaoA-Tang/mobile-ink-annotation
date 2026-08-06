@@ -1061,6 +1061,7 @@ export class AnnotationView extends FileView {
     }
     if (this.plugin.hasFeature("pdfTextAnnotation")) {
       this.toolbarButtons.select = this.createIconButton(toolGroup, "text-select", "选择文本", () => this.setSelectMode(!this.selectMode));
+      this.toolbarButtons.select.dataset.debugName = "select-text";
     }
     this.toolbarButtons.width = this.createIconButton(toolGroup, "sliders-horizontal", "线条粗细", () => this.setWidthPanelOpen(!this.widthPanelOpen));
 
@@ -4847,6 +4848,16 @@ export class AnnotationView extends FileView {
   }
 
   private setSelectMode(enabled: boolean): void {
+    console.log("[mobile-ink] setSelectMode", enabled, "current:", this.selectMode, "pdf:", this.isPdfPath(this.sourcePath), "standalone:", this.standalone);
+    try {
+      this.setSelectModeInner(enabled);
+    } catch (e) {
+      console.error("[mobile-ink] setSelectMode FAILED", e);
+      new Notice("选择文本模式切换失败: " + String(e));
+    }
+  }
+
+  private setSelectModeInner(enabled: boolean): void {
     if (enabled && this.strokeSelectMode) {
       ((...args: any[]) => (null as any))(false);
     }
@@ -4879,6 +4890,7 @@ export class AnnotationView extends FileView {
     this.rootEl?.classList.toggle("mobile-ink-browse-mode", this.browseMode);
     this.syncInkInputEnabled();
     this.refreshToolbarState();
+    console.log("[mobile-ink] setSelectMode done", "selectMode:", this.selectMode);
   }
 
   
