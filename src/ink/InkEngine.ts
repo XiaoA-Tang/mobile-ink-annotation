@@ -1,4 +1,5 @@
-import { distancePointToSegmentSquared, distanceSquared, drawStroke, drawStrokeSegment, drawStrokes, setupCanvas } from "./renderer";
+import { distancePointToSegmentSquared, distanceSquared, drawStroke, drawStrokeFromSmooth, drawStrokeSegment, drawStrokes, setupCanvas } from "./renderer";
+import { smoothStroke } from "./smoothing";
 import { InkEngineOptions, InkPoint, InkStroke, InkToolState } from "./types";
 
 const DEFAULT_TOOL_STATE: InkToolState = {
@@ -59,6 +60,7 @@ export class InkEngine {
   private inputEnabled = true;
   private displayScale = 1;
   private toolState: InkToolState = { ...DEFAULT_TOOL_STATE };
+  private activeSmoothCount = 0;
 
   constructor(
     private readonly liveCanvas: HTMLCanvasElement,
@@ -481,6 +483,7 @@ export class InkEngine {
 
     const stroke = this.createStroke();
     this.activeStroke = stroke;
+    this.activeSmoothCount = 0;
     const previousPointCount = stroke.points.length;
     this.appendTouchPoint(stroke, touch, event);
     this.notePenActivity();
@@ -635,6 +638,7 @@ export class InkEngine {
 
     const stroke = this.createStroke();
     this.activeStroke = stroke;
+    this.activeSmoothCount = 0;
     const previousPointCount = stroke.points.length;
     this.appendEventPoints(stroke, event);
     this.renderLiveIncrement(stroke, previousPointCount);
@@ -1139,9 +1143,7 @@ export class InkEngine {
 
     this.recordUndoSnapshot(this.strokes);
     this.strokes.push({ ...stroke, points: stroke.points.map((point) => ({ ...point })) });
-    if (!this.directlyRenderedStrokeIds.delete(stroke.id)) {
-      drawStroke(this.committedCtx, stroke);
-    }
+    this.directlyRenderedStrokeIds.delete(stroke.id);
     this.options.onStrokeCommit?.(stroke);
     this.debugStroke("commit", stroke);
     this.options.onChange();
@@ -1162,10 +1164,14 @@ export class InkEngine {
     this.liveCanvasDirty = false;
   }
 
-  private renderLiveIncrement(stroke: InkStroke, previousPointCount: number): void {
-    if (stroke.points.length <= previousPointCount) return;
+  private renderLiveIncrement(stroke: InkStroke, _previousRawCount: number): void {
     this.directlyRenderedStrokeIds.add(stroke.id);
-    drawStrokeSegment(this.committedCtx, stroke, previousPointCount);
+    const points = smoothStroke(stroke, false);
+    const start = Math.max(0, this.activeSmoothCount - 1);
+    if (points.length > start) {
+      drawStrokeFromSmooth(this.committedCtx, stroke, points, start);
+    }
+    this.activeSmoothCount = points.length;
   }
 
   private renderCommittedSoon(): void {
@@ -1398,7 +1404,9 @@ export class InkEngine {
       this.commitStroke(stroke);
     }
 
-    this.renderLiveNow();
+    // Full redraw snaps each committed stroke's end to the exact lift point
+    // (live drawing smooths the last point with last:false).
+    this.renderCommittedNow();
   }
 
   private schedulePendingCommitFlush(): void {
