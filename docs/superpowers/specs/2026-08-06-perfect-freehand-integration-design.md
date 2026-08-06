@@ -18,6 +18,13 @@
   - 复用已调好的线宽逻辑，改动最小、风险最低
 - 存储仍存**原始采样点**，向后兼容既有标注文件
 
+### 实现期发现（重要）
+- 核对 `perfect-freehand` 源码（`getStrokePoints.ts`）确认：输出点 = `lerp(上一个输出点, 当前输入点, t)`，是**因果递归插值**——输出点 i 只依赖输入点 0..i。新增输入点不会改变已产生的输出点。
+- 因此**实时增量绘制可直接保留**（无需尾窗重画），`renderLiveIncrement`/`drawStrokeSegment(previousPointCount)` 语义不变，只需把 previousPointCount 从"原始点数"改为"平滑点数"。
+- `size` 选项仅用于**起始段噪声过滤**（runningLength < size 时跳过中间点），非整体去重；取小值（≈笔宽）避免起笔"死区"。
+- `streamline` 控制插值 t（`t = 0.15 + (1-streamline)*0.85`）；streamline=0.5 → t≈0.575（中等平滑）。
+- `simulatePressure` 对 `getStrokePoints` 无效（未使用），压力直接透传真实值。
+
 ## 架构
 
 ```
@@ -48,21 +55,22 @@
 - 新增 `drawStrokeTail(ctx, stroke, fromIndex)`：从平滑点索引开始重画（圆帽不透明，覆盖重画正确）
 
 **3. `src/ink/InkEngine.ts`**
-- `renderLiveIncrement` → `renderLiveTail`：重算平滑点 + 画尾窗（`LIVE_TAIL_WINDOW = 12`）
-- `renderPredictedStroke`：改用平滑管线（点数少，开销可忽略）
+- `renderLiveIncrement` 的 `previousPointCount` 改为"已画平滑点数"（`activeSmoothCount`），起笔重置为 0
+- `renderPredictedStroke`：改为在已清空的 live canvas 上全量重画平滑后的预测笔迹
+- 提交时调 `renderCommittedNow()` 全量重画一次（用 `last: true` 让末点精确落在抬笔处）
 - 橡皮擦命中测试不变（基于原始点）
 
 ## 常量
 
-- `SMOOTH_STREAMLINE = 0.5`
-- `LIVE_TAIL_WINDOW = 12`
-- 尾窗需覆盖平滑窗口 + 去重余量（上游平滑窗口约 streamline*2，12 点足够）
+- `SMOOTH_STREAMLINE = 0.5`（t ≈ 0.575）
+- 平滑 `size` = `Math.max(1, Math.min(stroke.width * 2, 8))`（起始噪声门，小值防起笔死区）
+- 因平滑因果，无需尾窗常量
 
 ## 数据流与错误处理
 
-- 追加原始点 → 标记需要重算 → 下帧 `renderLiveTail` 重算平滑点并重画尾窗
+- 追加原始点 → 下帧 `smoothStroke`（按原始点数缓存）重算平滑点 → `drawStrokeSegment` 只画新平滑段
 - 平滑输出异常（空/NaN）时回退到原始点直画，避免白屏
-- `getStrokePoints` 对 1 点/2 点笔迹返回少量点，渲染器需处理（沿用现有 n===1 圆点逻辑）
+- `getStrokePoints` 对 1 点/2 点笔迹会内部补点，渲染器沿用现有逻辑
 
 ## 测试
 
@@ -85,5 +93,5 @@ Node 脚本验证（`scripts/` 或临时脚本）：
 
 ## 风险
 
-- 非因果平滑导致尾窗大小不合适 → 用 Node 脚本验证稳定性，必要时增大 `LIVE_TAIL_WINDOW`
-- perfect-freehand 选项语义（size 与去重半径关系）需读库源码确认 → 实现时核对
+- 平滑强度（streamline）需真机调优：过大则笔画追笔滞后，过小则抖动复现 → 先用 0.5，真机反馈后再调
+- perfect-freehand 选项语义已核对源码（size=起始噪声门、streamline 控制插值 t、last 控制末点精确）
