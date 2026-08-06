@@ -69,7 +69,19 @@ function computeWidths(stroke: InkStroke, base: number, startIndex: number): Flo
     return cached;
   }
 
-  const widths = cached && cached.length >= startIndex ? cached : new Float32Array(n);
+  // The stroke is still being appended to, so the cached buffer may be shorter
+  // than the current point count. NEVER reuse it as-is in that case: writes past
+  // the buffer end are silently dropped and lineWidth becomes NaN. Grow it and
+  // copy existing widths forward instead.
+  let widths: Float32Array;
+  if (cached && cached.length >= startIndex && cached.length >= n) {
+    widths = cached;
+  } else if (cached) {
+    widths = new Float32Array(n);
+    widths.set(cached);
+  } else {
+    widths = new Float32Array(n);
+  }
   let prevW = startIndex > 0 ? widths[startIndex - 1] : base * 0.5;
   let prevSpeed = startIndex > 0 ? (strokeSpeedCache.get(stroke) ?? 0) : 0;
 
