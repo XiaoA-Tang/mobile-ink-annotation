@@ -52,6 +52,7 @@ export class InkEngine {
   private directlyRenderedStrokeIds = new Set<string>();
   private suppressTouchPointerUntil = 0;
   private suppressTouchPanUntil = 0;
+  private stylusDetected = false;
   private debugMoveCounter = 0;
   private sampleTime = 0;
   private eraserChanged = false;
@@ -714,7 +715,10 @@ export class InkEngine {
   }
 
   private shouldWrite(event: PointerEvent): boolean {
-    if (event.pointerType === "pen") return true;
+    if (event.pointerType === "pen") {
+      this.stylusDetected = true;
+      return true;
+    }
     if (event.pointerType === "mouse") return true;
     if (this.shouldTreatTouchPointerAsPen(event)) return true;
     if (event.pointerType === "touch" && this.toolState.acceptTouchInput) return true;
@@ -745,6 +749,7 @@ export class InkEngine {
   private shouldTreatTouchPointerAsPen(event: PointerEvent): boolean {
     if (event.pointerType !== "touch") return false;
     if (this.toolState.acceptTouchInput) return true;
+    if (this.stylusDetected) return false;
     if (performance.now() >= this.suppressTouchPanUntil) return false;
 
     return this.hasFineContact(event.width, event.height, event.pressure);
@@ -760,7 +765,11 @@ export class InkEngine {
       force?: number;
     };
 
-    if (candidate.touchType === "stylus") return true;
+    if (candidate.touchType === "stylus") {
+      this.stylusDetected = true;
+      return true;
+    }
+    if (this.stylusDetected) return false;
     if (performance.now() >= this.suppressTouchPanUntil) return false;
     return this.hasFineContact(candidate.radiusX, candidate.radiusY, candidate.force);
   }
