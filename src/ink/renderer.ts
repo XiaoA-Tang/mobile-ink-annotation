@@ -1,4 +1,6 @@
 import { InkPoint, InkStroke } from "./types";
+import { smoothStroke } from "./smoothing";
+import type { SmoothPoint } from "./smoothing";
 
 export type CanvasSetupOptions = {
   maxDpr?: number;
@@ -46,115 +48,79 @@ export function clearCanvas(ctx: CanvasRenderingContext2D, width: number, height
   ctx.restore();
   ctx.clearRect(0, 0, width, height);
 }
-
 // ---------------------------------------------------------------------------
 // Width Computation (Causal & Stable)
 // ---------------------------------------------------------------------------
 
-// Per-stroke cached widths, keyed by the stroke object identity.
-// The stroke is mutated in place while it is being drawn (points appended),
-// so we track the computed length and only recompute newly appended points.
-const strokeWidthCache = new WeakMap<InkStroke, Float32Array>();
-const strokeSpeedCache = new WeakMap<InkStroke, number>();
+// Per-stroke widths cached by the (stable) smoothed point array identity.
+const smoothWidthCache = new WeakMap<SmoothPoint[], Float32Array>();
 
-function computeWidths(stroke: InkStroke, base: number, startIndex: number): Float32Array {
-  const points = stroke.points;
+function computeWidths(points: SmoothPoint[], base: number): Float32Array {
+  const cached = smoothWidthCache.get(points);
   const n = points.length;
-  const cached = strokeWidthCache.get(stroke);
+  if (cached && cached.length === n) return cached;
 
-  // Only recompute from startIndex (inclusive). Points before startIndex keep
-  // their previously computed widths, which is safe because the width formula
-  // is strictly causal (point i depends only on points 0..i).
-  if (cached && cached.length >= n && startIndex >= cached.length) {
-    return cached;
-  }
+  const widths = new Float32Array(n);
+  let prevW = base * 0.5;
 
-  // The stroke is still being appended to, so the cached buffer may be shorter
-  // than the current point count. NEVER reuse it as-is in that case: writes past
-  // the buffer end are silently dropped and lineWidth becomes NaN. Grow it and
-  // copy existing widths forward instead.
-  let widths: Float32Array;
-  if (cached && cached.length >= startIndex && cached.length >= n) {
-    widths = cached;
-  } else if (cached) {
-    widths = new Float32Array(n);
-    widths.set(cached);
-  } else {
-    widths = new Float32Array(n);
-  }
-  let prevW = startIndex > 0 ? widths[startIndex - 1] : base * 0.5;
-  let prevSpeed = startIndex > 0 ? (strokeSpeedCache.get(stroke) ?? 0) : 0;
-
-  for (let i = startIndex; i < n; i++) {
+  for (let i = 0; i < n; i++) {
     const p = points[i];
-    const next = i < n - 1 ? points[i + 1] : null;
 
     const pr = Math.max(0, Math.min(1.0, p.pressure));
     const pFactor = 0.4 + pr * 0.8;
 
-    // Velocity mapping with EMA smoothing: jittery event timestamps on some
-    // Android devices cause raw speed to spike and the stroke width to pulse.
+    // Geometric velocity: gap between consecutive smoothed points.
+    // Larger gap = faster = thinner. No timestamps involved, so jittery
+    // event clocks cannot pulse the stroke width.
     let vFactor = 1.0;
-    if (next) {
-      const dx = next.x - p.x;
-      const dy = next.y - p.y;
-      const dt = Math.max(1, next.t - p.t);
-      const speed = Math.hypot(dx, dy) / dt;
-      const smoothedSpeed = prevSpeed === 0 ? speed : prevSpeed * 0.65 + speed * 0.35;
-      prevSpeed = smoothedSpeed;
-      vFactor = Math.max(0.8, 1.0 - smoothedSpeed * 0.015);
+    if (p.distance > 0) {
+      vFactor = Math.max(0.7, 1.0 - p.distance * 0.025);
     }
-    strokeSpeedCache.set(stroke, prevSpeed);
 
     let rawW = base * pFactor * vFactor;
 
-    // Immediate start taper to avoid "blob" at the very first touch.
-    // This is fixed and causal, so it never shifts visually.
+    // Immediate start taper to avoid a "blob" at the very first touch.
     if (i < 3) {
       rawW *= 0.6 + 0.4 * (i / 2);
     }
 
     // Causal Forward EMA: width at point `i` ONLY depends on points `0..i`.
-    // This guarantees ZERO visual snapping/optimization when the stroke finishes.
     widths[i] = i === 0 ? rawW : 0.6 * rawW + 0.4 * prevW;
     prevW = widths[i];
   }
 
-  strokeWidthCache.set(stroke, widths);
+  smoothWidthCache.set(points, widths);
   return widths;
-}
-
-export function clearStrokeWidthCache(stroke: InkStroke): void {
-  strokeWidthCache.delete(stroke);
-  strokeSpeedCache.delete(stroke);
 }
 
 // ---------------------------------------------------------------------------
 // Rendering
 // ---------------------------------------------------------------------------
 
-function drawPen(ctx: CanvasRenderingContext2D, stroke: InkStroke, previousPointCount: number): void {
-  const points = stroke.points;
+function drawPenFromSmooth(
+  ctx: CanvasRenderingContext2D,
+  stroke: InkStroke,
+  points: SmoothPoint[],
+  startIndex: number
+): void {
   const n = points.length;
-  if (n === 0 || n <= previousPointCount) return;
+  if (n === 0 || n <= startIndex) return;
 
   ctx.save();
   ctx.globalCompositeOperation = "source-over";
   ctx.strokeStyle = stroke.color;
   ctx.fillStyle = stroke.color;
   ctx.globalAlpha = 1;
-  
-  // lineCap = "round" is the secret to gapless, robust ink. 
+
+  // lineCap = "round" is the secret to gapless, robust ink.
   // It effectively draws a perfect capsule between points.
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
 
-  // Widths are strictly deterministic and causal. Incremental recompute avoids
-  // O(n^2) work for long strokes (this was the main source of lag).
-  const widths = computeWidths(stroke, stroke.width, Math.max(0, previousPointCount - 1));
+  const widths = computeWidths(points, stroke.width);
 
   if (n === 1) {
-    if (previousPointCount === 0) {
+    if (startIndex === 0) {
       ctx.beginPath();
       ctx.arc(points[0].x, points[0].y, widths[0] / 2, 0, Math.PI * 2);
       ctx.fill();
@@ -165,7 +131,6 @@ function drawPen(ctx: CanvasRenderingContext2D, stroke: InkStroke, previousPoint
 
   // Draw new segments individually.
   // Overlapping opaque round-capped strokes perfectly merge without gaps.
-  const startIndex = Math.max(0, previousPointCount - 1);
   for (let i = startIndex; i < n - 1; i++) {
     ctx.beginPath();
     ctx.moveTo(points[i].x, points[i].y);
@@ -177,9 +142,14 @@ function drawPen(ctx: CanvasRenderingContext2D, stroke: InkStroke, previousPoint
   ctx.restore();
 }
 
-function drawHighlighter(ctx: CanvasRenderingContext2D, stroke: InkStroke, previousPointCount: number): void {
-  const pts = stroke.points;
-  if (pts.length === 0 || pts.length <= previousPointCount) return;
+function drawHighlighterFromSmooth(
+  ctx: CanvasRenderingContext2D,
+  stroke: InkStroke,
+  points: SmoothPoint[],
+  startIndex: number
+): void {
+  const n = points.length;
+  if (n === 0 || n <= startIndex) return;
 
   ctx.save();
   // Multiply blending mimics real highlighters
@@ -192,22 +162,22 @@ function drawHighlighter(ctx: CanvasRenderingContext2D, stroke: InkStroke, previ
 
   // Highlighter uses a single continuous path to prevent opacity compounding at joints
   ctx.beginPath();
-  const startIndex = Math.max(0, previousPointCount - 1);
-  ctx.moveTo(pts[startIndex].x, pts[startIndex].y);
-  
-  for (let i = startIndex + 1; i < pts.length; i++) {
-    ctx.lineTo(pts[i].x, pts[i].y);
+  ctx.moveTo(points[startIndex].x, points[startIndex].y);
+
+  for (let i = startIndex + 1; i < n; i++) {
+    ctx.lineTo(points[i].x, points[i].y);
   }
-  
+
   ctx.stroke();
   ctx.restore();
 }
 
 export function drawStroke(ctx: CanvasRenderingContext2D, stroke: InkStroke): void {
+  const points = smoothStroke(stroke, true);
   if (stroke.tool === "highlighter") {
-    drawHighlighter(ctx, stroke, 0);
+    drawHighlighterFromSmooth(ctx, stroke, points, 0);
   } else {
-    drawPen(ctx, stroke, 0);
+    drawPenFromSmooth(ctx, stroke, points, 0);
   }
 }
 
@@ -216,10 +186,25 @@ export function drawStrokeSegment(
   stroke: InkStroke,
   previousPointCount: number
 ): void {
+  const points = smoothStroke(stroke, false);
+  const start = Math.max(0, previousPointCount - 1);
   if (stroke.tool === "highlighter") {
-    drawHighlighter(ctx, stroke, previousPointCount);
+    drawHighlighterFromSmooth(ctx, stroke, points, start);
   } else {
-    drawPen(ctx, stroke, previousPointCount);
+    drawPenFromSmooth(ctx, stroke, points, start);
+  }
+}
+
+export function drawStrokeFromSmooth(
+  ctx: CanvasRenderingContext2D,
+  stroke: InkStroke,
+  points: SmoothPoint[],
+  startIndex: number
+): void {
+  if (stroke.tool === "highlighter") {
+    drawHighlighterFromSmooth(ctx, stroke, points, startIndex);
+  } else {
+    drawPenFromSmooth(ctx, stroke, points, startIndex);
   }
 }
 
