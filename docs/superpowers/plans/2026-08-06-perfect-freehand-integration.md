@@ -34,7 +34,7 @@
   - `export function getSmoothSize(width: number): number`
   - `export function smoothStroke(stroke: InkStroke, isComplete: boolean): SmoothPoint[]`（WeakMap 缓存，key=stroke，命中条件 rawCount 与 isComplete 均相同）
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `scripts/test-smoothing.mjs`（node 原生 TS 剥离直接 import 源码）:
 
@@ -109,12 +109,12 @@ function assert(cond, msg) {
 console.log("OK: all smoothing assertions passed");
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `node --experimental-strip-types scripts/test-smoothing.mjs`
 Expected: FAIL，`ERR_MODULE_NOT_FOUND`（`../src/ink/smoothing.ts` 不存在）。
 
-- [ ] **Step 3: 写 `src/ink/smoothing.ts`**
+- [x] **Step 3: 写 `src/ink/smoothing.ts`**
 
 ```ts
 import { getStrokePoints } from "perfect-freehand";
@@ -177,13 +177,13 @@ export function smoothStroke(stroke: InkStroke, isComplete: boolean): SmoothPoin
 }
 ```
 
-- [ ] **Step 4: 运行确认通过**
+- [x] **Step 4: 运行确认通过**
 
 Run: `node --experimental-strip-types scripts/test-smoothing.mjs`
 Expected: PASS，输出 `OK: all smoothing assertions passed`。
 （若 Node 原生 TS 剥离报错，退路：把测试改为直接 `require("perfect-freehand")` 并镜像 20 行转换逻辑，验证库的因果性/有限性保证。）
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add src/ink/smoothing.ts scripts/test-smoothing.mjs package.json
@@ -206,7 +206,7 @@ git commit -m "feat: add causal stroke smoothing via perfect-freehand (getStroke
   - `export function drawStrokes(ctx, strokes: InkStroke[]): void`（不变，内部走 drawStroke）
   - 移除 `clearStrokeWidthCache` 与旧的 `strokeWidthCache`/`strokeSpeedCache`（无调用方）
 
-- [ ] **Step 1: 替换 import 与宽度缓存**
+- [x] **Step 1: 替换 import 与宽度缓存**
 
 在 `src/ink/renderer.ts` 顶部：
 
@@ -216,7 +216,7 @@ import { smoothStroke } from "./smoothing";
 import type { SmoothPoint } from "./smoothing";
 ```
 
-- [ ] **Step 2: 重写 `computeWidths`（平滑点、几何速度、按数组身份缓存）**
+- [x] **Step 2: 重写 `computeWidths`（平滑点、几何速度、按数组身份缓存）**
 
 用下面整段替换原 `computeWidths`（第 60-113 行附近）与 `clearStrokeWidthCache`（第 115-118 行）：
 
@@ -262,7 +262,7 @@ function computeWidths(points: SmoothPoint[], base: number): Float32Array {
 }
 ```
 
-- [ ] **Step 3: 重写 `drawPen` → `drawPenFromSmooth`**
+- [x] **Step 3: 重写 `drawPen` → `drawPenFromSmooth`**
 
 用下面替换原 `drawPen`（第 124-166 行）：
 
@@ -310,7 +310,7 @@ function drawPenFromSmooth(
 }
 ```
 
-- [ ] **Step 4: 重写 `drawHighlighter` → `drawHighlighterFromSmooth`**
+- [x] **Step 4: 重写 `drawHighlighter` → `drawHighlighterFromSmooth`**
 
 用下面替换原 `drawHighlighter`（第 180-204 行）：
 
@@ -343,7 +343,7 @@ function drawHighlighterFromSmooth(
 }
 ```
 
-- [ ] **Step 5: 重写公共绘制入口**
+- [x] **Step 5: 重写公共绘制入口**
 
 用下面替换原 `drawStroke`/`drawStrokeSegment`/`drawStrokes`（第 206-230 行）：
 
@@ -391,12 +391,12 @@ export function drawStrokes(ctx: CanvasRenderingContext2D, strokes: InkStroke[])
 }
 ```
 
-- [ ] **Step 6: 类型检查**
+- [x] **Step 6: 类型检查**
 
 Run: `npx tsc -noEmit -skipLibCheck`
 Expected: 无错误（注意 `InkPoint` 在 `distanceSquared`/`distancePointToSegmentSquared` 中仍在使用，import 保留）。
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```bash
 git add src/ink/renderer.ts
@@ -414,7 +414,7 @@ git commit -m "feat: render smoothed points with geometric velocity widths (no t
 - Consumes: `smoothStroke(stroke, isComplete)`（Task 1）、`drawStrokeFromSmooth(ctx, stroke, points, startIndex)`（Task 2）
 - Produces: 无新公共 API；`renderLiveIncrement` 的入参 `previousRawCount` 变为"忽略"，改用内部 `activeSmoothCount`
 
-- [ ] **Step 1: 加 import 与字段**
+- [x] **Step 1: 加 import 与字段**
 
 在 `src/ink/InkEngine.ts` 顶部 import 行加：
 
@@ -434,7 +434,7 @@ import { distancePointToSegmentSquared, distanceSquared, drawStroke, drawStrokeF
 private activeSmoothCount = 0;
 ```
 
-- [ ] **Step 2: 起笔重置计数**
+- [x] **Step 2: 起笔重置计数**
 
 在两处 `this.activeStroke = stroke;`（约第 483 行 touch 路径、第 637 行 pointer 路径）之后各加一行：
 
@@ -442,7 +442,7 @@ private activeSmoothCount = 0;
     this.activeSmoothCount = 0;
 ```
 
-- [ ] **Step 3: 重写 `renderLiveIncrement`**
+- [x] **Step 3: 重写 `renderLiveIncrement`**
 
 替换第 1165-1169 行：
 
@@ -460,7 +460,7 @@ private activeSmoothCount = 0;
 
 （8 处调用点仍传原始点数，参数改为忽略，无需逐个改动。）
 
-- [ ] **Step 4: 提交时全量重画，末点精确落笔**
+- [x] **Step 4: 提交时全量重画，末点精确落笔**
 
 在 `commitStroke`（第 1132-1148 行）中，删掉增量绘制块：
 
@@ -490,17 +490,17 @@ private activeSmoothCount = 0;
   }
 ```
 
-- [ ] **Step 5: 检查 `drawStroke` 是否还有其他直接调用需要保持全量语义**
+- [x] **Step 5: 检查 `drawStroke` 是否还有其他直接调用需要保持全量语义**
 
 Run: `rg "drawStroke\(" src/ink/InkEngine.ts`
 Expected: 仅 `renderCommittedNow` 内使用（第 1188 行 activeStroke、`drawStrokes` 内部）。确认无误后，`renderCommittedNow` 不变（它本来就是全量重画，走 isComplete=true）。
 
-- [ ] **Step 6: 构建**
+- [x] **Step 6: 构建**
 
 Run: `npm run build`
 Expected: 构建通过，生成 `main.js`。
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```bash
 git add src/ink/InkEngine.ts
@@ -514,16 +514,16 @@ git commit -m "feat: route live ink through smoothing pipeline with exact end-po
 **Files:**
 - Modify: `package.json`、`manifest.json`
 
-- [ ] **Step 1: 升版本**
+- [x] **Step 1: 升版本**
 
 `package.json` 与 `manifest.json` 的 `"version"` 均改为 `"1.1.13"`。
 
-- [ ] **Step 2: 构建**
+- [x] **Step 2: 构建**
 
 Run: `npm run build`
 Expected: `tsc -noEmit` 通过、esbuild 输出 `main.js`（大小约 256KB 上下）。
 
-- [ ] **Step 3: 提交并打 tag**
+- [x] **Step 3: 提交并打 tag**
 
 ```bash
 git add -A
@@ -531,7 +531,7 @@ git commit -m "chore: bump to 1.1.13"
 git tag v1.1.13-beta
 ```
 
-- [ ] **Step 4: 更新 beta release（id 365346021）**
+- [x] **Step 4: 更新 beta release（id 365346021）**
 
 1. 取 token：`("protocol=https`nhost=github.com`nusername=XiaoA-Tang`n" | git credential fill 2>$null | Select-String "^password=").ToString().Substring(9)`
 2. PATCH release：`tag_name` → `v1.1.13-beta`，`name` → `v1.1.13-beta`，body 更新（含：集成 perfect-freehand 平滑+几何线宽）
@@ -539,7 +539,7 @@ git tag v1.1.13-beta
 4. 删除旧 assets（main.js/manifest.json/styles.css），用 `curl.exe -s -X POST -H "Authorization: token $token" --data-binary "@<file>" "https://uploads.github.com/repos/XiaoA-Tang/mobile-ink-annotation/releases/365346021/assets?name=<file>"` 逐个上传新产物
 5. 验证：release `tag_name`/`prerelease` 与 assets 大小
 
-- [ ] **Step 5: 交付说明**
+- [x] **Step 5: 交付说明**
 
 告知用户：真机验证 ① 闪退是否消失 ② 卡顿/抽搐改善 ③ 末点落笔位置 ④ 旧标注外观变化；如需调平滑强度改 `SMOOTH_STREAMLINE`（调大=更顺滑/追笔滞后，调小=更跟手/略抖）。
 
