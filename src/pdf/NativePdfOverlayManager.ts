@@ -43,6 +43,8 @@ export class NativePdfOverlayManager {
   private pinchLastMid = { x: 0, y: 0 };
   private zoomFrame: number | null = null;
   private relayoutTimer: number | null = null;
+  private endPinchRaf: number | null = null;
+  private viewerWarned = false;
 
   constructor(
     private readonly app: App,
@@ -171,15 +173,13 @@ export class NativePdfOverlayManager {
     this.viewer = this.resolveViewer(leaf, containerEl);
     const overlayEl = this.overlay!;
     const onTouchStart = (event: TouchEvent): void => {
-      let added = false;
       for (const t of Array.from(event.changedTouches)) {
         const onToolbar = t.target instanceof Element && t.target.closest(".mobile-ink-native-toolbar") !== null;
-        if (!onToolbar || this.pinchTouches.size >= 2) {
+        if (!onToolbar) {
           this.pinchTouches.set(t.identifier, { x: t.clientX, y: t.clientY });
-          added = true;
         }
       }
-      if (added && this.pinchTouches.size >= 2) {
+      if (this.pinchTouches.size >= 2) {
         event.preventDefault();
         event.stopPropagation();
         this.beginPinch();
@@ -226,8 +226,10 @@ export class NativePdfOverlayManager {
       overlayEl.removeEventListener("wheel", onWheel);
       if (this.zoomFrame !== null) window.cancelAnimationFrame(this.zoomFrame);
       if (this.relayoutTimer !== null) window.clearTimeout(this.relayoutTimer);
+      if (this.endPinchRaf !== null) window.cancelAnimationFrame(this.endPinchRaf);
       this.zoomFrame = null;
       this.relayoutTimer = null;
+      this.endPinchRaf = null;
       this.pinchActive = false;
       this.pinchTouches.clear();
       this.viewer = null;
@@ -399,7 +401,10 @@ export class NativePdfOverlayManager {
     }
     const fallback = containerEl.querySelector<HTMLElement>(".pdf-container");
     if (fallback) {
-      console.warn("Mobile Ink Annotation: pdf.js viewer unavailable; pinch zoom disabled, two-finger pan only");
+      if (!this.viewerWarned) {
+        this.viewerWarned = true;
+        console.warn("Mobile Ink Annotation: pdf.js viewer unavailable; pinch zoom disabled, two-finger pan only");
+      }
       return { currentScale: 1, container: fallback };
     }
     return null;
@@ -441,13 +446,16 @@ export class NativePdfOverlayManager {
     this.pinchActive = false;
     // 双 rAF：给 pdf.js 当前帧 + 下一帧完成缩放后的页面布局，再读最新 .page 矩形重建；
     // 期间保留 .panning 隐藏画布，重建完成后统一移除。
-    window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
-      try {
-        this.relayout();
-      } finally {
-        this.overlay?.classList.remove("mobile-ink-native-panning");
-      }
-    }));
+    this.endPinchRaf = window.requestAnimationFrame(() => {
+      this.endPinchRaf = window.requestAnimationFrame(() => {
+        this.endPinchRaf = null;
+        try {
+          this.relayout();
+        } finally {
+          this.overlay?.classList.remove("mobile-ink-native-panning");
+        }
+      });
+    });
   }
 
   private scheduleRelayout(): void {
@@ -462,7 +470,7 @@ export class NativePdfOverlayManager {
     const leaf = this.drawModeLeaf;
     const containerEl = leaf?.view.containerEl;
     if (!leaf || !containerEl || !this.layout || !this.overlay) return;
-    for (const entry of this.engines) entry.engine.replaceStrokes(entry.engine.getStrokes(), false);
+    for (const entry of this.engines) entry.engine.setInputEnabled(false);
     for (const entry of this.engines) this.replacePageStrokes(entry.page.pageNumber);
     for (const entry of this.engines) {
       entry.engine.destroy();
@@ -532,5 +540,6 @@ export class NativePdfOverlayManager {
     this.toolbarButtons = {};
     this.colorDot = null;
     this.viewer = null;
+    this.viewerWarned = false;
   }
 }
