@@ -634,6 +634,7 @@ git commit -m "构建: 提交画布嵌入页面重建后的 main.js（仓库惯�
 
 ### Task 3: 终局 whole-branch review + 发布
 
-- [ ] 用 code-reviewer（`requesting-code-review`）对基线 `98b0bdb`（release v1.2.3）至 HEAD 做 whole-branch review；修复发现的问题并重验 `npm run build` + 两个回归脚本。
+- [x] 用 code-reviewer（`requesting-code-review`）对基线 `98b0bdb`（release v1.2.3）至 HEAD 做 whole-branch review。
+- [x] 评审结论：Ready to merge「With fixes（仅 1 Important）」。修复同窗格 PDF→PDF 切换：新增 `file-open` 订阅，`update()` 比较 `leaf.view.file` 与 `drawFile`，文件变化即 `deactivateOverlay()`（spec §7.6 明确要求）；另加 `followTick` 的 `unloaded` guard（Minor 防御）。修复提交 `17556e9`（源）+ `d5f84a4`（main.js）。重验 build exit 0 + 24 断言 + 22 断言全绿。其余 Minor（内联样式重复、relayout 空白帧、getVisiblePages 视口）为既有/有意为之，beta 期接受，记录不修。
 - [ ] 按用户约定直接发布 `v1.2.4-beta`：bump `package.json`+`manifest.json` → `npm run build` → commit `release: bump version to 1.2.4` → push main → 本地 tag `v1.2.4-beta` 并 push → write 工具写 UTF-8 body → `curl.exe --data-binary @payload.json` 创建 release（`prerelease:true`）→ 上传 main.js/manifest.json/styles.css → GET 校验尺寸与本地一致。
 - [ ] 交付真机验证清单（见 spec §7，重点：滚动零延迟贴页、捏合 200ms 后变清晰、顶栏笔按钮可点、无对号按钮、自动保存仍生效）。
