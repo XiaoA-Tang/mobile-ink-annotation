@@ -4,13 +4,13 @@
 
 **Goal:** 把 PDF 绘制入口从右上角悬浮笔按钮移到 PDF 顶栏「⋮ 三个点」所在工具栏（⋮ 旁加图标钮），并让绘制模式下支持双指自由平移 + 捏合缩放（0.5x–8x），单指/触控笔仍作画、桌面滚轮平移。
 
-**Architecture:** 顶栏按钮挂在 `leaf.view.containerEl` 的 `.pdf-toolbar` 里（类 `clickable-icon mobile-ink-pdf-toolbar-pen`，Obsidian 主题原生外观，零 CSS）。手势路由改为 **window 捕获级 touch 事件**（注册晚于 InkEngine → 先执行）管理多指，overlay 上 `wheel` 管桌面平移：1 指交给 InkEngine 作画；2 指进入捏合（平移=中点位移→滚动容器；缩放=距离比→rAF 节流设 `viewer.currentScale`），**捏合期间对每个引擎 `setInputEnabled(false)`**（InkEngine 会 `finishInterruptedInput` 优雅收尾活动笔划、清空自身 pan 状态），松手后 `relayout()`：`replaceStrokes` 兜底结束任何活动笔划 → 各引擎 `replacePageStrokes` 固化逻辑笔迹 → 销毁引擎/画布 → 按当前 `.page` 矩形重建（undo 历史随之重置，为已知取舍）。
+**Architecture:** 顶栏按钮挂在 `leaf.view.containerEl` 的 `.pdf-toolbar` 里（类 `clickable-icon mobile-ink-pdf-toolbar-pen`，Obsidian 主题原生外观，零 CSS）。手势路由改为 **window 捕获级 touch 事件**（与 InkEngine 同在 window 捕获阶段；同节点同阶段按注册序触发，InkEngine 先注册先触发、我们的后触发）管理多指，overlay 上 `wheel` 管桌面平移：1 指交给 InkEngine 作画；2 指进入捏合（平移=中点位移→滚动容器；缩放=距离比→rAF 节流设 `viewer.currentScale`），**捏合期间对每个引擎 `setInputEnabled(false)`**（InkEngine 会 `finishInterruptedInput` 优雅收尾活动笔划、清空自身 pan 状态），松手后 `relayout()`：`replaceStrokes` 兜底结束任何活动笔划 → 各引擎 `replacePageStrokes` 固化逻辑笔迹 → 销毁引擎/画布 → 按当前 `.page` 矩形重建（undo 历史随之重置，为已知取舍）。
 
 > **设计偏离说明（相对 spec）**：spec 提的是 captureLayer 上 pointer 事件跟踪。计划改用在 window 上捕获 touch 事件并禁用引擎输入，原因（已读源码核实）：
 > 1. InkEngine 以 document capture 监听 pointer 事件（bindEvents InkEngine.ts:235-238），在活动笔划移动、触摸压笔、`beginPan` 等路径调用 `event.stopPropagation()`，overlay 上的冒泡 pointer 监听会漏事件；
 > 2. 触摸指针（非笔、acceptTouchInput=false）落在画布内会触发 InkEngine 自身 `beginPan`（onPointerDown InkEngine.ts:291-294），与我们的平移叠加造成双倍位移；
 > 3. InkEngine 无公开取消笔划 API，但 `setInputEnabled(false)` 内部调 `finishInterruptedInput`（提交活动笔划、重置全部指针状态），是干净的"进入捏合"方式。
-> window touch 监听与 InkEngine 同在 window 捕获阶段、注册更晚 → 先执行（DOM 同节点同阶段按注册序）；`stopPropagation` 不影响同节点其他监听，InkEngine 的 window touch 处理仍会运行（无碍）。**单指事件绝不 preventDefault/stopPropagation**（否则破坏 InkEngine 压笔拒绝与作画）。
+> window touch 监听与 InkEngine 同在 window 捕获阶段（DOM 同节点同阶段按注册序触发，InkEngine 先注册→先触发、我们后注册→后触发）。**功能正确性不依赖监听顺序**：捏合期各引擎已 `setInputEnabled(false)`（InkEngine 全部处理因 `inputEnabled` 提前返回），且 InkEngine 自身 `onTouchStart` 的 `touches.length > 1` 分支会中断触摸笔划；`stopPropagation` 不会阻断同节点同阶段的后注册监听。**单指事件绝不 preventDefault/stopPropagation**（否则破坏 InkEngine 压笔拒绝与作画）。
 
 **Tech Stack:** TypeScript / Obsidian plugin API（`WorkspaceLeaf.view`、`setIcon`）/ pdf.js 内嵌 viewer（`leaf.view.viewer`，降级回退 `.pdf-container`）/ InkEngine（**本功能不改动**，仅调用既有公开方法 `setInputEnabled`/`replaceStrokes`）。
 
