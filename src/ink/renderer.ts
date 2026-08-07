@@ -6,6 +6,7 @@ export type CanvasSetupOptions = {
   maxDpr?: number;
   maxPixels?: number;
   displayScale?: number;
+  desynchronized?: boolean;
 };
 
 export function setupCanvas(
@@ -32,7 +33,7 @@ export function setupCanvas(
   canvas.width = Math.max(1, Math.ceil(width * dpr));
   canvas.height = Math.max(1, Math.ceil(height * dpr));
   
-  const ctx = canvas.getContext("2d", { alpha: true, desynchronized: true });
+  const ctx = canvas.getContext("2d", { alpha: true, desynchronized: options.desynchronized !== false });
   if (!ctx) throw new Error("Unable to create 2D canvas context");
   
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);

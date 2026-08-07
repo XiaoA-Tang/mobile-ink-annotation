@@ -69,16 +69,16 @@ export class InkEngine {
     private readonly options: InkEngineOptions
   ) {
     this.toolState = { ...DEFAULT_TOOL_STATE, ...options.initialToolState };
-    this.committedCtx = this.setupInkCanvas(committedCanvas, this.displayScale);
-    this.liveCtx = this.setupInkCanvas(liveCanvas, this.displayScale);
+    this.committedCtx = this.setupInkCanvas(committedCanvas, this.displayScale, false);
+    this.liveCtx = this.setupInkCanvas(liveCanvas, this.displayScale, true);
     this.bindEvents();
   }
 
   resize(width: number, height: number): void {
     this.width = Math.max(1, Math.ceil(width));
     this.height = Math.max(1, Math.ceil(height));
-    this.committedCtx = this.setupInkCanvas(this.committedCanvas, this.displayScale);
-    this.liveCtx = this.setupInkCanvas(this.liveCanvas, this.displayScale);
+    this.committedCtx = this.setupInkCanvas(this.committedCanvas, this.displayScale, false);
+    this.liveCtx = this.setupInkCanvas(this.liveCanvas, this.displayScale, true);
     this.predictedStrokeRendered = false;
     this.renderCommittedNow();
   }
@@ -88,8 +88,8 @@ export class InkEngine {
     if (Math.abs(next - this.displayScale) < 0.05) return;
 
     this.displayScale = next;
-    this.committedCtx = this.setupInkCanvas(this.committedCanvas, this.displayScale);
-    this.liveCtx = this.setupInkCanvas(this.liveCanvas, this.displayScale);
+    this.committedCtx = this.setupInkCanvas(this.committedCanvas, this.displayScale, false);
+    this.liveCtx = this.setupInkCanvas(this.liveCanvas, this.displayScale, true);
     this.liveCanvasDirty = true;
     this.renderCommittedNow();
     this.renderLiveNow();
@@ -244,11 +244,12 @@ export class InkEngine {
     document.addEventListener("pointermove", this.onDocumentPointerProbe, { capture: true });
   }
 
-  private setupInkCanvas(canvas: HTMLCanvasElement, displayScale: number): CanvasRenderingContext2D {
+  private setupInkCanvas(canvas: HTMLCanvasElement, displayScale: number, desynchronized: boolean): CanvasRenderingContext2D {
     return setupCanvas(canvas, this.width, this.height, {
       maxDpr: this.options.canvasMaxDpr,
       maxPixels: this.options.canvasMaxPixels,
-      displayScale
+      displayScale,
+      desynchronized
     });
   }
 
