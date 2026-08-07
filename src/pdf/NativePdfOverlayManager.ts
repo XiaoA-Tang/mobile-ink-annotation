@@ -181,7 +181,7 @@ export class NativePdfOverlayManager {
     const addToolButton = (key: string, icon: string, label: string, action: () => void, group: HTMLElement): void => {
       const btn = group.createEl("button", {
         cls: "mobile-ink-icon-button mobile-ink-tool-button",
-        attr: { "aria-label": label, title: label }
+        attr: { "aria-label": label }
       });
       setIcon(btn, icon);
       btn.addEventListener("click", action);
@@ -190,7 +190,7 @@ export class NativePdfOverlayManager {
     const addIconButton = (key: string, icon: string, label: string, action: () => void, group: HTMLElement): void => {
       const btn = group.createEl("button", {
         cls: "mobile-ink-icon-button",
-        attr: { "aria-label": label, title: label }
+        attr: { "aria-label": label }
       });
       setIcon(btn, icon);
       btn.addEventListener("click", action);
@@ -205,7 +205,7 @@ export class NativePdfOverlayManager {
     const styleGroup = dock.createDiv({ cls: "mobile-ink-toolbar-group" });
     const colorBtn = styleGroup.createEl("button", {
       cls: "mobile-ink-current-color-button",
-      attr: { "aria-label": "颜色", title: "颜色" }
+      attr: { "aria-label": "颜色" }
     });
     const colorDot = colorBtn.createDiv({ cls: "mobile-ink-current-color-dot" });
     colorBtn.addEventListener("click", () => this.cycleColor());
@@ -379,5 +379,8 @@ export class NativePdfOverlayManager {
     this.overlay?.remove();
     this.overlay = null;
     this.captureLayer = null;
+    this.toolbar = null;
+    this.toolbarButtons = {};
+    this.colorDot = null;
   }
 }
