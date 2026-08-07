@@ -2507,3 +2507,34 @@ input.mobile-ink-pdf-page-input {
 .mobile-ink-native-page-canvas {
   pointer-events: auto;
 }
+
+.mobile-ink-native-toolbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  background: var(--background-primary);
+  border-bottom: 1px solid var(--background-modifier-border);
+  z-index: 360;
+}
+.mobile-ink-native-tool {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-normal);
+  border: none;
+  cursor: pointer;
+}
+.mobile-ink-native-tool-active {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}

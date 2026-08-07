@@ -32,6 +32,8 @@ export class NativePdfOverlayManager {
   private saveTimer: number | null = null;
   private dirty = false;
   private _gestureCleanup: (() => void) | null = null;
+  private toolbar: HTMLElement | null = null;
+  private toolbarButtons: Record<string, HTMLElement> = {};
 
   constructor(
     private readonly app: App,
@@ -141,6 +143,7 @@ export class NativePdfOverlayManager {
     // 3. 覆盖层 + 捕获层
     this.overlay = containerEl.createDiv({ cls: NATIVE_OVERLAY_CLS, attr: { "aria-hidden": "true" } });
     this.captureLayer = this.overlay.createDiv({ cls: NATIVE_OVERLAY_CAPTURE_CLS });
+    this.buildToolbar(this.overlay);
 
     // 4. 可见页引擎
     const pages = this.getVisiblePages(containerEl);
@@ -166,6 +169,60 @@ export class NativePdfOverlayManager {
     };
 
     this.markDirty();
+  }
+
+  private buildToolbar(containerEl: HTMLElement): void {
+    const bar = containerEl.createDiv({ cls: "mobile-ink-native-toolbar" });
+    this.toolbar = bar;
+    const tools: Array<{ key: string; icon: string; label: string; action: () => void }> = [
+      { key: "pen", icon: "pen-tool", label: "笔", action: () => this.applyToolState({ tool: "pen" }) },
+      { key: "highlighter", icon: "highlighter", label: "荧光笔", action: () => this.applyToolState({ tool: "highlighter" }) },
+      { key: "eraser", icon: "eraser", label: "橡皮", action: () => this.applyToolState({ tool: "eraser" }) },
+      { key: "undo", icon: "undo-2", label: "撤销", action: () => { for (const e of this.engines) e.engine.undo(); this.refreshToolbar(); } },
+      { key: "redo", icon: "redo-2", label: "重做", action: () => { for (const e of this.engines) e.engine.redo(); this.refreshToolbar(); } },
+      { key: "color", icon: "palette", label: "颜色", action: () => this.cycleColor() },
+      { key: "width", icon: "sliders-horizontal", label: "线宽", action: () => this.cycleWidth() },
+      { key: "save", icon: "checkmark", label: "保存", action: () => void this.flushSave() },
+      { key: "exit", icon: "x", label: "退出", action: () => void this.exitDrawMode() }
+    ];
+    for (const t of tools) {
+      const btn = bar.createEl("button", { cls: "mobile-ink-native-tool", attr: { "aria-label": t.label } });
+      setIcon(btn, t.icon);
+      btn.addEventListener("click", t.action);
+      this.toolbarButtons[t.key] = btn;
+    }
+    this.refreshToolbar();
+  }
+
+  private refreshToolbar(): void {
+    if (!this.toolbar) return;
+    const t = this.toolState;
+    for (const key of ["pen", "highlighter", "eraser"]) {
+      const el = this.toolbarButtons[key];
+      if (el) el.classList.toggle("mobile-ink-native-tool-active", t.tool === key);
+    }
+  }
+
+  private applyToolState(patch: Partial<InkToolState>): void {
+    Object.assign(this.toolState, patch);
+    for (const e of this.engines) e.engine.setToolState({ ...patch });
+    this.refreshToolbar();
+  }
+
+  private cycleColor(): void {
+    const palette = ["#111111", "#e53935", "#1e88e5", "#43a047", "#ffb300", "#8e24aa"];
+    const current = this.toolState.tool === "highlighter" ? this.toolState.highlighterColor : this.toolState.color;
+    const next = palette[(palette.indexOf(current) + 1 + palette.length) % palette.length];
+    if (this.toolState.tool === "highlighter") this.applyToolState({ highlighterColor: next });
+    else this.applyToolState({ color: next });
+  }
+
+  private cycleWidth(): void {
+    const widths = [2, 3, 5, 8];
+    const current = this.toolState.tool === "highlighter" ? this.toolState.highlighterWidth : this.toolState.width;
+    const next = widths[(widths.indexOf(current) + 1) % widths.length];
+    if (this.toolState.tool === "highlighter") this.applyToolState({ highlighterWidth: next });
+    else this.applyToolState({ width: next });
   }
 
   private getVisiblePages(containerEl: HTMLElement): Array<{ pageNumber: number; rect: ScreenRect }> {
