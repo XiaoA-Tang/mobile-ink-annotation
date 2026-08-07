@@ -170,6 +170,17 @@ git push "https://x-access-token:<PUSH_TOKEN>@github.com/XiaoA-Tang/mobile-ink-a
 用户装 1.1.16-beta，打开一个多页 PDF，等 2 秒，把插件目录下的 `native-pdf-probe.json` 内容反馈。
 **通过判据**：`candidatePageCount >= 1` 且每个页候选 `canvases.length >= 1`，`iframeCount === 0`，`embeds.length === 0`。若通过 → 继续 Task 2-6；若页候选为 0 或 iframe/embed 隔离 → 停下来与用户重新评估（覆盖层不可行，降级为方案 B 就地切换）。
 
+### SPIKE 探测结论（Task 1 真机反馈 2026-08-07，华为平板 / 209 页 PDF）
+
+- **闸门判定：通过（可行）。** `iframeCount=0`、`embeds.length=0` → 页元素与 leaf 同 DOM，无隔离障碍。`candidatePageCount=209` 中 207 个为真 `.page` 元素。
+- **修正 1 — 页选择器**：`[class*='pdf-page']` 会误配工具栏（`.pdf-page-input`、`.pdf-page-numbers`）。页元素一律用精确 `.page` 类 + `data-page-number` 属性（Task 4 起生效；Task 1 探测代码保留原样，仅作为已消费的一次性探测）。
+- **修正 2 — 原生布局无 gap**：所有 `.page` rect top 递增恰好 = 页高（无 12px 间隙）。不影响存储坐标系——`buildUniformPageLayout` 的 gap 定义的是全局逻辑存储空间（与现有视图一致），换算按页锚定到 DOM rect。几何模块不得假定原生空间含 gap，一律从 DOM 实测 rect 推导。
+- **修正 3 — canvas 懒渲染**：仅可见页有 canvas（209 页中仅 4 页）。"每页 canvases>=1" 判据无效。覆盖层自建 canvas 锚定 `.page` rect，不依赖原生 canvas 存在。
+- **修正 4 — viewer 类名**：`.pdf-view` 不存在；检测用 `.pdf-viewer`/`.pdf-container`/`.pdf-scroll-container`（Task 4 检测）。
+- **修正 5 — 页 div 动态窗口**：远离视口的 `.page` 会被 pdf.js 移除/重建（探测时第 1、2 页 div 不在 DOM）。Task 4/5 需在滚动时 re-scan/MutationObserver 挂载覆盖 canvas，不能假定全部页常驻。
+- **原生 canvas 内嵌**：页 rect 674×935，原生 canvas 666×927（约 4px 内边距）。覆盖对齐以 `.page` rect（border-box）为锚，不用 canvas。
+- **发布流程教训**：release body 必须用 node 写 UTF8 文件（PowerShell here-string 会被控制台 GBK 编码损坏中文）；`<PUSH_TOKEN>` 占位符不得被回填进提交。
+
 ---
 
 ### Task 2: 纯几何模块 + 单元测试
@@ -177,6 +188,7 @@ git push "https://x-access-token:<PUSH_TOKEN>@github.com/XiaoA-Tang/mobile-ink-a
 **Files:**
 - Create: `src/pdf/nativePdfGeometry.ts`
 - Create: `scripts/test-native-pdf-geometry.mjs`
+- Modify: `tsconfig.json`（加 `"allowImportingTsExtensions": true`）
 
 **Interfaces:**
 - Consumes: `PdfJsDocument`（来自 `src/views/annotationTypes.ts`）、`PDF_BACKGROUND_PAGE_GAP`/`PDF_BACKGROUND_MOBILE_MAX_WIDTH`（来自 `src/views/annotationConstants.ts`）。
@@ -252,11 +264,15 @@ console.log("OK: all native-pdf-geometry assertions passed");
 Run: `node --experimental-strip-types scripts/test-native-pdf-geometry.mjs`
 Expected: FAIL，报 `Cannot find module ... nativePdfGeometry.ts` 或 `computePageSizeFromPdf is not a function`。
 
+- [ ] **Step 2.5: tsconfig 启用 `.ts` 扩展名导入**
+
+在 `tsconfig.json` 的 `compilerOptions` 中加入 `"allowImportingTsExtensions": true`（构建命令为 `tsc -noEmit -skipLibCheck`，满足该选项"需 noEmit"的前提）。原因：`nativePdfGeometry.ts` 运行时导入 `annotationConstants`，Node `--experimental-strip-types` 不做扩展名解析，必须写成 `../views/annotationConstants.ts` 才能被测试脚本加载。esbuild 与 tsc（noEmit）均可处理 `.ts` 扩展名导入，不影响现有文件。
+
 - [ ] **Step 3: 实现 `src/pdf/nativePdfGeometry.ts`**
 
 ```ts
-import type { PdfJsDocument } from "../views/annotationTypes";
-import { PDF_BACKGROUND_PAGE_GAP, PDF_BACKGROUND_MOBILE_MAX_WIDTH } from "../views/annotationConstants";
+import type { PdfJsDocument } from "../views/annotationTypes.ts";
+import { PDF_BACKGROUND_PAGE_GAP, PDF_BACKGROUND_MOBILE_MAX_WIDTH } from "../views/annotationConstants.ts";
 
 export type LogicalPage = {
   pageNumber: number;
@@ -329,7 +345,7 @@ Expected: 全部 ok + `OK: all native-pdf-geometry assertions passed`，退出�
 - [ ] **Step 5: 提交**
 
 ```bash
-git add src/pdf/nativePdfGeometry.ts scripts/test-native-pdf-geometry.mjs
+git add src/pdf/nativePdfGeometry.ts scripts/test-native-pdf-geometry.mjs tsconfig.json
 git commit -m "feat: native PDF overlay geometry (logical layout + screen mapping) with tests"
 ```
 
