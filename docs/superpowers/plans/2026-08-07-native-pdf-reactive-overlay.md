@@ -31,7 +31,7 @@
 - Consumes: `src/ink/InkEngine` 公开 API、`nativePdfGeometry.ts` 的 `buildUniformPageLayout`/`computePageSizeFromPdf`/`LogicalPage`/`LogicalPageLayout`/`ScreenRect`、`overlayInkData.ts` 的 `assignStrokeToPage`/`convertStrokesToLogical`/`convertStrokesToScreen`/`splitStrokesByPage`、`InkToolState`、`StrokeStore.load/save`。
 - Produces: 导出的常量 `NATIVE_PEN_BUTTON_CLS`/`NATIVE_OVERLAY_CLS`/`NATIVE_OVERLAY_PAGE_CANVAS_CLS`/`NATIVE_ANNOTATING_CLS`（Task 2 的 CSS 与 main.ts 依赖）；行为——PDF 叶签激活自动挂载覆盖层、顶栏笔按钮切换工具条显隐、手指触控放行、rAF 逐帧跟随页面。
 
-- [ ] **Step 1: 重写 `src/pdf/NativePdfOverlayManager.ts`**
+- [x] **Step 1: 重写 `src/pdf/NativePdfOverlayManager.ts`**
 
 将文件内容整体替换为以下最终代码（改动要点：删手势劫持/pinch/`viewer` 内部解析/capture 层/滚轮劫持/`.panning`；覆盖层 pointer-events 由 CSS 控制；新增 `followFrame` rAF 循环 + `syncPageTracking` + settle 重建；`update()` 自动激活；顶栏按钮改为 `toggleToolbar`；工具条移除「退出」按钮）：
 
@@ -86,6 +86,7 @@ export class NativePdfOverlayManager {
   private rectCache = new Map<HTMLElement, ScreenRect>();
   private teardownToken = 0;
   private retryBlockedUntil = 0;
+  private unloaded = false;
 
   constructor(
     private readonly app: App,
@@ -100,6 +101,7 @@ export class NativePdfOverlayManager {
   }
 
   onunload(): void {
+    this.unloaded = true;
     for (const ref of this.eventRefs) this.app.workspace.offref(ref);
     this.eventRefs = [];
     this.removePenButton();
@@ -111,6 +113,7 @@ export class NativePdfOverlayManager {
   }
 
   private update(): void {
+    if (this.unloaded) return;
     const leaf = this.app.workspace.activeLeaf;
     if (this.isActive) {
       if (!leaf || leaf !== this.activeLeaf || leaf.getViewState().type !== "pdf") {
@@ -213,6 +216,7 @@ export class NativePdfOverlayManager {
         this.activeLeaf = null;
         this.teardownOverlay(containerEl);
         this.retryBlockedUntil = performance.now() + 3000;
+        this.removePenButton();
         this.update();
       }
     }
@@ -487,15 +491,18 @@ export class NativePdfOverlayManager {
   }
 
   private async deactivateOverlay(): Promise<void> {
-    this.teardownToken++;
+    const token = ++this.teardownToken;
     const leaf = this.activeLeaf;
     const containerEl = leaf?.view.containerEl;
     this.activeLeaf = null;
+    for (const entry of this.engines) entry.engine.setInputEnabled(false);
     await this.flushSave();
+    if (token !== this.teardownToken) return;
     this.teardownOverlay(containerEl);
     if (leaf) {
       this.currentLeaf = null;
     }
+    this.update();
   }
 
   private teardownOverlay(containerEl?: HTMLElement): void {
@@ -504,6 +511,7 @@ export class NativePdfOverlayManager {
     this.sizeChangedAt = null;
     this.rectCache.clear();
     for (const entry of this.engines) {
+      entry.engine.setInputEnabled(false);
       entry.engine.destroy();
     }
     this.engines = [];
@@ -520,7 +528,7 @@ export class NativePdfOverlayManager {
 }
 ```
 
-- [ ] **Step 2: 更新 `styles.css` 覆盖层规则**
+- [x] **Step 2: 更新 `styles.css` 覆盖层规则**
 
 a) 找到 `.mobile-ink-native-overlay {` 块（约 `2472-2477`），在 `overflow: hidden;` 后新增一行 `pointer-events: none;`，并删除其下 `.mobile-ink-native-capture { ... }` 块（约 `2479-2484`）：
 
@@ -544,12 +552,12 @@ b) `.mobile-ink-native-page-canvas` 块（约 `2486-2488`）把 `pointer-events:
 
 c) 删除文件末尾 `.mobile-ink-native-overlay.mobile-ink-native-panning .mobile-ink-native-page-canvas { ... }` 整条规则（含 `visibility: hidden`）。
 
-- [ ] **Step 3: 构建验证**
+- [x] **Step 3: 构建验证**
 
 Run: `npm run build`
 Expected: exit 0（tsc 无错、esbuild 成功产出 main.js）。
 
-- [ ] **Step 4: 回归验证**
+- [x] **Step 4: 回归验证**
 
 Run: `node scripts/test-canvas-budget.mjs`
 Expected: `checked 24 assertions` + `OK: all canvas budget assertions passed`，exit 0。
@@ -557,12 +565,12 @@ Expected: `checked 24 assertions` + `OK: all canvas budget assertions passed`，
 Run: `node scripts/test-native-pdf-geometry.mjs`
 Expected: `OK: all native-pdf-geometry assertions passed`，exit 0。
 
-- [ ] **Step 5: 自检 diff**
+- [x] **Step 5: 自检 diff**
 
 Run: `git diff --stat`
 Expected: 仅 `src/pdf/NativePdfOverlayManager.ts`、`styles.css` 变化；确认已无 `pinchTouches`/`beginPinch`/`handlePinchMove`/`endPinch`/`scheduleRelayout`/`resolveViewer`/`viewerWarned`/`captureLayer`/`mobile-ink-native-panning` 残留。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add src/pdf/NativePdfOverlayManager.ts styles.css
@@ -587,13 +595,13 @@ git commit -m "构建: 提交响应式覆盖层重建后的 main.js（仓库惯�
 - Consumes: Task 1 导出的 `NATIVE_ANNOTATING_CLS`（类名 `mobile-ink-native-annotating`，覆盖层激活时加到 PDF 叶签容器）与工具条类 `mobile-ink-native-toolbar`。
 - Produces: 无新接口；行为——打开 PDF 不再自动弹「探测到…」Notice；原生 PDF 文本不可选中；顶栏笔按钮可折叠底部工具条。
 
-- [ ] **Step 1: 删除 `src/main.ts` 自动探测块**
+- [x] **Step 1: 删除 `src/main.ts` 自动探测块**
 
 删除 `onload()` 中从 `let nativePdfProbeDone = false;` 到对应 `this.registerEvent(this.app.workspace.on("active-leaf-change", () => { ... }));` 结尾的整段代码（约 `44-58` 行）。保留手动命令 `probe-native-pdf-structure` 与 `import { probeNativePdfStructure }`（命令仍使用它）。
 
 删除后 `onload()` 不再包含 `active-leaf-change` 的 `registerEvent`；确认 `nativePdfProbeDone`、`window.setTimeout(...)` 探测回调不再存在。
 
-- [ ] **Step 2: 新增 CSS（追加到 `styles.css` 文件末尾）**
+- [x] **Step 2: 新增 CSS（追加到 `styles.css` 文件末尾）**
 
 ```css
 /* Reactive overlay: 批注激活时禁用原生 PDF 文本选择（手写为核心，无文字框选需求） */
@@ -608,12 +616,12 @@ git commit -m "构建: 提交响应式覆盖层重建后的 main.js（仓库惯�
 }
 ```
 
-- [ ] **Step 3: 构建验证**
+- [x] **Step 3: 构建验证**
 
 Run: `npm run build`
 Expected: exit 0。
 
-- [ ] **Step 4: 自检**
+- [x] **Step 4: 自检**
 
 Run: `git diff src/main.ts`
 Expected: 仅删除自动探测块；命令与导入保留。
@@ -621,7 +629,7 @@ Expected: 仅删除自动探测块；命令与导入保留。
 Run: `Select-String -Path main.js -Pattern "页候选数"`（构建产物）
 Expected: 无匹配（旧构建已含该字符串则说明 build 未重跑/失败）。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add src/main.ts styles.css
@@ -638,6 +646,14 @@ git commit -m "构建: 提交移除自动探测重建后的 main.js（仓库惯�
 
 ### Task 3: 终局 whole-branch review + 发布
 
-- [ ] 用 code-reviewer（`requesting-code-review`）对基线 `951260f`（release v1.2.2）至 HEAD 做 whole-branch review；修复发现的问题并重验 `npm run build` + 两个回归脚本。
+- [x] 用 code-reviewer（`requesting-code-review`）对基线 `951260f`（release v1.2.2）至 HEAD 做 whole-branch review；修复发现的问题并重验 `npm run build` + 两个回归脚本。
+
+终局评审结果（Base `951260f` → Head `9ac9354`，7 commits）→ 1 Critical + 4 Important，全部修复于 `ee8c10a` + `c22ea91`（仅改 `src/pdf/NativePdfOverlayManager.ts`）：
+1. **Critical：同窗格 PDF→PDF 切换不重新激活新叶签** —— `deactivateOverlay()` 丢失 v1.2.2 `exitDrawMode` 的 `update()` 尾调用。修复：`deactivateOverlay()` 末尾补 `this.update()`；`onunload()` 前置 `this.unloaded = true` 且 `update()` 顶部 `if (this.unloaded) return;`，防止卸载时误重新激活。
+2. **Important：teardown 竞态可能破坏新激活的覆盖层** —— `await this.flushSave()` 期间新激活会让旧 `teardownOverlay` 误删。修复：`const token = ++this.teardownToken;` 并在 await 后 `if (token !== this.teardownToken) return;`。
+3. **Important：去激活时进行中笔划丢失** —— `flushSave()` 前对全部引擎 `setInputEnabled(false)`（内部 finish + flush 提交活动笔划）；`teardownOverlay()` 每个引擎 `destroy()` 前同样先 `setInputEnabled(false)`。
+4. **Important：失败重试是死代码** —— `activateOverlay` catch 中 `this.update()` 因 penButton/`currentLeaf` 幸存而提前返回。修复：`this.update()` 前先 `this.removePenButton()`。
+5. **Important：测试缺口** —— 覆盖层生命周期逻辑无自动测试；缓解：设备清单新增「同一窗格 PDF→PDF 切换」用例（见 spec §8）。
+
 - [ ] 按用户约定直接发布 `v1.2.3-beta`：bump `package.json`+`manifest.json` → `npm run build` → commit `release: bump version to 1.2.3` → push main → 本地 tag `v1.2.3-beta` 并 push → write 工具写 UTF-8 body → `curl.exe --data-binary` 创建 release（`prerelease:true`）→ 上传 main.js/manifest.json/styles.css → GET 校验尺寸与本地一致。
 - [ ] 交付真机验证清单（见 spec §8）。
