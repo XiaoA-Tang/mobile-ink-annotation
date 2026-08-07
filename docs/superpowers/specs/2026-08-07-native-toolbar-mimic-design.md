@@ -99,7 +99,7 @@ CSS 改写 `.mobile-ink-native-toolbar`：
 
 ### 3. Native 覆盖层别名 CSS
 
-以 `.mobile-ink-native-overlay` 为作用域复刻原版 3 组作用域规则（圆钮外观 + 盒几何、dark 主题底色、18px 字形 pin），并显式恢复悬浮按钮笔色前景、定义 shell 变量。**悬浮笔按钮挂在 PDF 容器（非 overlay）下，必须把 `.mobile-ink-native-pen-button` 一并加入别名选择器**，否则按钮圆钮外观与图标字形缺失：
+以 `.mobile-ink-native-overlay` 为作用域复刻原版 3 组作用域规则（圆钮外观 + 盒几何、dark 主题底色、18px 字形 pin），并显式恢复悬浮按钮笔色前景、定义 shell 变量。**悬浮笔按钮挂在 PDF 容器（非 overlay）下，必须把 `.mobile-ink-native-pen-button` 一并加入别名选择器**，否则按钮圆钮外观与图标字形缺失。悬浮按钮/笔按钮**只 pin 盒几何与圆角**，背景/阴影继承原版 `.mobile-ink-floating-button` 本体（玻璃+笔色），避免别名把玻璃背景压成纯色：
 
 ```css
 .mobile-ink-native-overlay {
@@ -108,9 +108,7 @@ CSS 改写 `.mobile-ink-native-toolbar`：
 }
 
 .mobile-ink-native-overlay button.mobile-ink-icon-button,
-.mobile-ink-native-overlay button.mobile-ink-current-color-button,
-.mobile-ink-native-overlay button.mobile-ink-floating-button,
-button.mobile-ink-native-pen-button {
+.mobile-ink-native-overlay button.mobile-ink-current-color-button {
   --mobile-ink-icon-foreground: var(--text-muted);
   appearance: none;
   -webkit-appearance: none;
@@ -129,9 +127,7 @@ button.mobile-ink-native-pen-button {
 }
 
 .theme-dark .mobile-ink-native-overlay button.mobile-ink-icon-button,
-.theme-dark .mobile-ink-native-overlay button.mobile-ink-current-color-button,
-.theme-dark .mobile-ink-native-overlay button.mobile-ink-floating-button,
-.theme-dark button.mobile-ink-native-pen-button {
+.theme-dark .mobile-ink-native-overlay button.mobile-ink-current-color-button {
   background: var(--background-primary-alt);
   color: var(--text-muted);
   box-shadow: inset 0 0 0 1px var(--background-modifier-border);
@@ -157,9 +153,18 @@ button.mobile-ink-native-pen-button .svg-icon {
   visibility: visible;
 }
 
-/* 悬浮按钮图标颜色随笔色（覆盖别名中 text-muted 的前景色） */
+/* 悬浮按钮/笔按钮：仅 pin 盒几何与圆角，外观继承原版 floating-button 本体（玻璃+笔色），并恢复笔色图标前景 */
 .mobile-ink-native-overlay button.mobile-ink-floating-button,
 button.mobile-ink-native-pen-button {
+  appearance: none;
+  -webkit-appearance: none;
+  border-radius: 999px;
+  position: relative;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+  padding: 0;
   --mobile-ink-icon-foreground: var(--mobile-ink-tool-color, var(--interactive-accent));
 }
 ```
