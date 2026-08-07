@@ -292,8 +292,10 @@ Expected: `old native-tool rules: 0`（旧 `.mobile-ink-native-tool {` 与 `.mob
 
 #### 步骤 9: 提交
 
+`npm run build` 会重新生成 `main.js`（仓库跟踪的构建产物，惯例随功能一起提交）。
+
 ```bash
-git add src/pdf/NativePdfOverlayManager.ts styles.css
+git add src/pdf/NativePdfOverlayManager.ts styles.css main.js
 git commit -m "feat: mimic original floating toolbar for native PDF overlay (top-right pen button + bottom pill toolbar)"
 ```
 
