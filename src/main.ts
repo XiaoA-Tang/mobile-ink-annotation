@@ -2,6 +2,7 @@ import { App, Notice, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf } 
 import { StrokeStore } from "./ink/StrokeStore";
 import { AnnotationView } from "./views/AnnotationView";
 import { VIEW_TYPE_MOBILE_INK } from "./constants";
+import { probeNativePdfStructure } from "./pdf/nativePdfProbe";
 
 export type SavedFilePosition =
   | { kind: "pdf"; page: number }
@@ -34,6 +35,40 @@ export default class MobileInkAnnotationPlugin extends Plugin {
     this.registerEvent(this.app.workspace.on("file-open", (file) => {
       this.queueOpenPdfWithAnnotationByDefault(file);
     }));
+
+    let nativePdfProbeDone = false;
+    this.registerEvent(this.app.workspace.on("active-leaf-change", () => {
+      if (nativePdfProbeDone) return;
+      const leaf = this.app.workspace.activeLeaf;
+      if (!leaf || leaf.getViewState().type !== "pdf") return;
+      nativePdfProbeDone = true;
+      window.setTimeout(() => {
+        const result = probeNativePdfStructure(leaf);
+        const text = JSON.stringify(result, null, 2);
+        console.log("[MobileInkProbe]", text);
+        const pluginDir = this.manifest.dir ?? `.obsidian/plugins/${this.manifest.id}`;
+        void this.app.vault.adapter.write(`${pluginDir}/native-pdf-probe.json`, text);
+        new Notice(`探测完成: 页候选数 ${result.candidatePageCount}, iframe=${result.iframeCount}, embed=${result.embeds.length}, pdfView=${result.pdfViewFound}。结果写入 ${pluginDir}/native-pdf-probe.json`);
+      }, 2000);
+    }));
+
+    this.addCommand({
+      id: "probe-native-pdf-structure",
+      name: "探测原生 PDF 视图结构 (SPIKE)",
+      checkCallback: (checking) => {
+        const leaf = this.app.workspace.activeLeaf;
+        const ok = !!leaf && leaf.getViewState().type === "pdf";
+        if (checking) return ok;
+        if (!ok || !leaf) return false;
+        const result = probeNativePdfStructure(leaf);
+        const text = JSON.stringify(result, null, 2);
+        console.log("[MobileInkProbe]", text);
+        const pluginDir = this.manifest.dir ?? `.obsidian/plugins/${this.manifest.id}`;
+        void this.app.vault.adapter.write(`${pluginDir}/native-pdf-probe.json`, text);
+        new Notice(`探测完成: 页候选数 ${result.candidatePageCount}, iframe=${result.iframeCount}, embed=${result.embeds.length}。结果写入 ${pluginDir}/native-pdf-probe.json`);
+        return true;
+      }
+    });
 
     this.addSettingTab(new MobileInkAnnotationSettingTab(this.app, this));
 
