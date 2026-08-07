@@ -2489,3 +2489,21 @@ input.mobile-ink-pdf-page-input {
 .mobile-ink-native-pen-button:hover {
   filter: brightness(1.1);
 }
+
+.mobile-ink-native-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 350;
+  overflow: hidden;
+}
+
+.mobile-ink-native-capture {
+  position: absolute;
+  inset: 0;
+  background: transparent;
+  touch-action: none;
+}
+
+.mobile-ink-native-page-canvas {
+  pointer-events: auto;
+}
