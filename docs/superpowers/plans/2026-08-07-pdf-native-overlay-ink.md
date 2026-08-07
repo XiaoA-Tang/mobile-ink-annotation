@@ -399,19 +399,17 @@ assert("toLogical width", Math.round(back[0].width), 2);
 - [ ] **Step 2: 运行确认失败**
 
 Run: `node --experimental-strip-types scripts/test-native-pdf-geometry.mjs`
-Expected: FAIL，`Cannot find module ... overlayInkData.ts`。
-
-- [ ] **Step 3: 实现 `src/pdf/overlayInkData.ts`**
+Expected: FAIL，`Cannot find module ... overlayInkData.ts`。- [ ] **Step 3: 实现 `src/pdf/overlayInkData.ts`**
 
 ```ts
-import { InkStroke } from "../ink/types";
+import type { InkStroke } from "../ink/types.ts";
 import {
   LogicalPage,
   LogicalPageLayout,
   ScreenRect,
   logicalToScreen,
   screenToLogical
-} from "./nativePdfGeometry";
+} from "./nativePdfGeometry.ts";
 
 export function assignStrokeToPage(stroke: InkStroke, layout: LogicalPageLayout): LogicalPage | null {
   const bounds = getStrokeBounds(stroke);
