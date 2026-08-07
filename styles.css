@@ -2540,3 +2540,14 @@ input.mobile-ink-pdf-page-input {
   opacity: 1;
   visibility: visible;
 }
+
+/* Reactive overlay: 批注激活时禁用原生 PDF 文本选择（手写为核心，无文字框选需求） */
+.mobile-ink-native-annotating .textLayer {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* 顶栏笔按钮显隐底部工具条 */
+.mobile-ink-native-toolbar.is-collapsed {
+  display: none;
+}
