@@ -57,7 +57,8 @@ export class NativePdfOverlayManager {
   onload(): void {
     this.eventRefs.push(
       this.app.workspace.on("layout-change", () => this.update()),
-      this.app.workspace.on("active-leaf-change", () => this.update())
+      this.app.workspace.on("active-leaf-change", () => this.update()),
+      this.app.workspace.on("file-open", () => this.update())
     );
   }
 
@@ -77,7 +78,9 @@ export class NativePdfOverlayManager {
     if (this.unloaded) return;
     const leaf = this.app.workspace.activeLeaf;
     if (this.isActive) {
-      if (!leaf || leaf !== this.activeLeaf || leaf.getViewState().type !== "pdf") {
+      const file = leaf ? (leaf.view as unknown as { file?: TFile }).file : undefined;
+      const fileChanged = !!file && this.drawFile !== file;
+      if (!leaf || leaf !== this.activeLeaf || leaf.getViewState().type !== "pdf" || fileChanged) {
         void this.deactivateOverlay();
       }
       return;
@@ -185,7 +188,7 @@ export class NativePdfOverlayManager {
 
   private followTick = (): void => {
     this.followFrame = null;
-    if (!this.isActive) return;
+    if (this.unloaded || !this.isActive) return;
     const containerEl = this.activeLeaf?.view.containerEl;
     if (!containerEl) return;
     try {
