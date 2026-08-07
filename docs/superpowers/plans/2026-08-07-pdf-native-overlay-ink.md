@@ -743,6 +743,9 @@ private async enterDrawMode(leaf: WorkspaceLeaf): Promise<void> {
 
 private async setupDrawMode(leaf: WorkspaceLeaf, file: TFile): Promise<void> {
   const containerEl = leaf.view.containerEl;
+  // 修正：进入绘画模式即记录 leaf（activeDrawMode 依赖）并移除笔按钮，否则绘画期间按钮残留、activeDrawMode 恒 false
+  this.drawModeLeaf = leaf;
+  this.removePenButton();
   this.drawFile = file;
   const scrollClientWidth = Math.max(320, containerEl.clientWidth || window.innerWidth);
 
@@ -786,9 +789,8 @@ private async setupDrawMode(leaf: WorkspaceLeaf, file: TFile): Promise<void> {
 private getVisiblePages(containerEl: HTMLElement): Array<{ pageNumber: number; rect: ScreenRect }> {
   const vw = window.innerWidth;
   const vh = window.innerHeight;
-  const candidates = containerEl.querySelectorAll<HTMLElement>(
-    "[class*='pdf-page'], [class*='page-container'], .page"
-  );
+  // SPIKE 结论：仅用精确 .page 类，避免误配 .pdf-page-input/.pdf-page-numbers 工具栏元素
+  const candidates = containerEl.querySelectorAll<HTMLElement>(".page");
   const pages: Array<{ pageNumber: number; rect: ScreenRect }> = [];
   candidates.forEach((el) => {
     const rect = el.getBoundingClientRect();
@@ -903,7 +905,7 @@ private teardownDrawMode(): void {
 修正 import：`overlayInkData` 的 import 需要加上 `assignStrokeToPage`；`InkStroke` 从 `../ink/types` import；`new Notice` 从 `obsidian` import。将 `NATIVE_PEN_BUTTON_CLS` 改为从本文件导出（它已定义，去掉 import 行）。最终头部 import 应为：
 
 ```ts
-import { App, loadPdfJs, Notice, Platform, setIcon, TFile, WorkspaceLeaf } from "obsidian";
+import { App, loadPdfJs, Notice, Platform, setIcon, TFile, Workspace, WorkspaceLeaf } from "obsidian";
 import { StrokeStore } from "../ink/StrokeStore";
 import { InkEngine } from "../ink/InkEngine";
 import { InkStroke, InkToolState } from "../ink/types";
@@ -912,6 +914,8 @@ import { PdfJsDocument, PdfJsLib } from "../views/annotationTypes";
 import { buildUniformPageLayout, computePageSizeFromPdf, LogicalPage, LogicalPageLayout, ScreenRect } from "./nativePdfGeometry";
 import { assignStrokeToPage, convertStrokesToLogical, convertStrokesToScreen, splitStrokesByPage } from "./overlayInkData";
 ```
+
+注：保留 `Workspace`（Task 4 的 `ReturnType<Workspace["on"]>` 需要它）。
 
 - [ ] **Step 2: 手势锁定（在 `setupDrawMode` 末尾追加）**
 
