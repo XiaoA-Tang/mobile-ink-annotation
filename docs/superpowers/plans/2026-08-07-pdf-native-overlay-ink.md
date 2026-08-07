@@ -1,23 +1,36 @@
-﻿# PDF 鍘熺敓瑙嗗浘灏卞湴涔﹀啓妯″紡 Implementation Plan
+# PDF 原生视图就地书写模式 Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 鍦?Obsidian 鍘熺敓 PDF 瑙嗗浘涓婂彔鍔犲氨鍦版墜鍐欏眰鈥斺€旂偣鍑绘偓娴?绗?鎸夐挳鐩存帴杩涘叆缁樼敾妯″紡锛屾墜鍐?鑽у厜绗?姗＄毊鑷敱涔﹀啓锛岄€€鍑哄悗鍥炲埌鍘熺敓瑙嗗浘缁х画闃呰缂╂斁锛屽叏绋嬩笉鍙﹀紑鏍囩椤碉紝绗旇抗涓庣幇鏈夊畬鏁存爣娉ㄨ鍥句簰閫氥€?
-**Architecture:** 鎻掍欢绾у崟渚?`NativePdfOverlayManager` 鐩戝惉宸ヤ綔鍖?leaf锛屾娴嬪師鐢?PDF 瑙嗗浘骞舵寕鎮诞绗旀寜閽€傝繘鍏ョ粯鐢绘ā寮忓悗锛屽湪 leaf 瀹瑰櫒涓婂彔鍔?fixed 瑕嗙洊灞傦紝瀵规瘡涓彲瑙侀〉鍒涘缓涓€涓榻愬叾灞忓箷鐭╁舰鐨?`InkEngine`锛堝紩鎿庡伐浣滃湪"椤靛睆骞曞儚绱?绌洪棿锛夛紱绗旇抗鍦ㄦ寔涔呭寲杈圭晫澶勭敤绾嚱鏁版崲绠楀埌鍏ㄥ眬閫昏緫鍧愭爣锛堜笌鐜版湁 `.ink.json` 鍚屾瀯锛夈€傜粯鐢绘ā寮忛攣瀹氱缉鏀?婊氬姩锛岃閬垮悓姝ュ師鐢熺缉鏀剧殑閿欎綅椋庨櫓銆?*Task 1 鏄湡鏈?SPIKE锛堝彲琛屾€ч椄闂級**锛屾娴嬪師鐢?PDF 椤靛厓绱犳槸鍚﹀彲璁块棶銆侀潪 iframe/embed 闅旂銆?
-**Tech Stack:** TypeScript銆丱bsidian API锛坄loadPdfJs`銆乣setIcon`銆乣workspace` 浜嬩欢锛夈€乸dfjs-dist锛堜粎鍙栬鍙ｅ嚑浣曪級銆佺幇鏈?`InkEngine`/`StrokeStore`/`SaveQueue`/`resolveInkCanvasBudget`銆?
+**Goal:** 在 Obsidian 原生 PDF 视图上叠加就地手写层——点击悬浮"笔"按钮直接进入绘画模式，手写/荧光笔/橡皮自由书写，退出后回到原生视图继续阅读缩放，全程不另开标签页，笔迹与现有完整标注视图互通。
+
+**Architecture:** 插件级单例 `NativePdfOverlayManager` 监听工作区 leaf，检测原生 PDF 视图并挂悬浮笔按钮。进入绘画模式后，在 leaf 容器上叠加 fixed 覆盖层，对每个可见页创建一个对齐其屏幕矩形的 `InkEngine`（引擎工作在"页屏幕像素"空间）；笔迹在持久化边界处用纯函数换算到全局逻辑坐标（与现有 `.ink.json` 同构）。绘画模式锁定缩放/滚动，规避同步原生缩放的错位风险。**Task 1 是真机 SPIKE（可行性闸门）**，检测原生 PDF 页元素是否可访问、非 iframe/embed 隔离。
+
+**Tech Stack:** TypeScript、Obsidian API（`loadPdfJs`、`setIcon`、`workspace` 事件）、pdfjs-dist（仅取视口几何）、现有 `InkEngine`/`StrokeStore`/`SaveQueue`/`resolveInkCanvasBudget`。
+
 ## Global Constraints
 
-- 鍧愭爣绾﹀畾锛氬瓨鍌ㄧ瑪杩逛负**鍏ㄥ眬閫昏緫鍧愭爣**锛涚 N 椤?`y 鈭?[offsetY, offsetY + pageHeight]`锛宍offsetY = (N-1) * (pageHeight + PDF_BACKGROUND_PAGE_GAP)`锛宍PDF_BACKGROUND_PAGE_GAP = 12`锛岄€昏緫椤靛楂樺彇鑷?`views/annotationConstants.ts`銆傛墍鏈夎浆鎹㈠嚱鏁颁笌鐜版湁 `AnnotationView.preparePdfInkStrokesForCurrentLayout` 绾﹀畾涓€鑷淬€?- 澧ㄨ抗娓叉煋锛歝ommitted canvas **蹇呴』 `desynchronized:false`**锛坴1.1.15 淇锛孉ndroid WebView 鍛堢幇缂洪櫡锛夛紱backing 鍙?`resolveInkCanvasBudget` 涓婇檺绾︽潫锛坴1.1.14 淇锛夈€?- 宸ュ叿鐘舵€侀粯璁ゅ€硷細`tool:"pen"`, `color:"#111111"`, `width:2`, `highlighterColor:"#ffd54a"`, `highlighterWidth:14`, `eraserRadius:18`, `acceptTouchInput:false`锛堜笌 `AnnotationView.createInitialInkToolState` 涓€鑷达級銆?- 缁樼敾妯″紡閿佸畾缂╂斁/婊氬姩锛堢敤鎴峰凡纭锛夛紝杩欐槸涓诲姩鍙栬垗锛屼笉绠楃己闄枫€?- 鍙戝竷娴佺▼锛堟瘡娆″彂甯冨浐瀹氭楠わ級锛歚npm run build` 鈫?`git commit` 鈫?tag 鈫?`git push "https://x-access-token:<TOKEN>@github.com/XiaoA-Tang/mobile-ink-annotation.git" main <tag>` 鈫?POST release锛坆ody 鐢?node 鍐?UTF8 鏂囦欢 + `curl.exe --data-binary`锛夆啋 涓婁紶 3 涓?assets銆?- 鍗曞厓娴嬭瘯杩愯鏂瑰紡锛歚node --experimental-strip-types scripts/test-native-pdf-geometry.mjs`锛堟部鐢?`test-canvas-budget.mjs` 鐨?TS strip 妯″紡锛夈€?
+- 坐标约定：存储笔迹为**全局逻辑坐标**；第 N 页 `y ∈ [offsetY, offsetY + pageHeight]`，`offsetY = (N-1) * (pageHeight + PDF_BACKGROUND_PAGE_GAP)`，`PDF_BACKGROUND_PAGE_GAP = 12`，逻辑页宽高取自 `views/annotationConstants.ts`。所有转换函数与现有 `AnnotationView.preparePdfInkStrokesForCurrentLayout` 约定一致。
+- 墨迹渲染：committed canvas **必须 `desynchronized:false`**（v1.1.15 修复，Android WebView 呈现缺陷）；backing 受 `resolveInkCanvasBudget` 上限约束（v1.1.14 修复）。
+- 工具状态默认值：`tool:"pen"`, `color:"#111111"`, `width:2`, `highlighterColor:"#ffd54a"`, `highlighterWidth:14`, `eraserRadius:18`, `acceptTouchInput:false`（与 `AnnotationView.createInitialInkToolState` 一致）。
+- 绘画模式锁定缩放/滚动（用户已确认），这是主动取舍，不算缺陷。
+- 发布流程（每次发布固定步骤）：`npm run build` → `git commit` → tag → `git push "https://x-access-token:<TOKEN>@github.com/XiaoA-Tang/mobile-ink-annotation.git" main <tag>` → POST release（body 用 node 写 UTF8 文件 + `curl.exe --data-binary`）→ 上传 3 个 assets。
+- 单元测试运行方式：`node --experimental-strip-types scripts/test-native-pdf-geometry.mjs`（沿用 `test-canvas-budget.mjs` 的 TS strip 模式）。
+
 ---
 
-### Task 1: SPIKE 鈥?鍘熺敓 PDF 缁撴瀯鎺㈡祴锛堝彂甯?1.1.16-beta锛?
+### Task 1: SPIKE — 原生 PDF 结构探测（发布 1.1.16-beta）
+
 **Files:**
 - Create: `src/pdf/nativePdfProbe.ts`
 - Modify: `src/main.ts`
-- Modify: `package.json`銆乣manifest.json`锛堢増鏈?1.1.15 鈫?1.1.16锛?
+- Modify: `package.json`、`manifest.json`（版本 1.1.15 → 1.1.16）
+
 **Interfaces:**
-- Produces: `probeNativePdfStructure(leaf: WorkspaceLeaf): NativePdfProbeResult`锛圱ask 4 澶嶇敤鍏朵腑椤靛厓绱犳娴嬫€濊矾锛夈€?- Consumes: 鏃犮€?
-- [ ] **Step 1: 鍒涘缓 `src/pdf/nativePdfProbe.ts`**
+- Produces: `probeNativePdfStructure(leaf: WorkspaceLeaf): NativePdfProbeResult`（Task 4 复用其中页元素检测思路）。
+- Consumes: 无。
+
+- [ ] **Step 1: 创建 `src/pdf/nativePdfProbe.ts`**
 
 ```ts
 import { WorkspaceLeaf } from "obsidian";
@@ -81,15 +94,16 @@ export function probeNativePdfStructure(leaf: WorkspaceLeaf): NativePdfProbeResu
 }
 ```
 
-- [ ] **Step 2: 鍦?`src/main.ts` 鎺ュ叆鎺㈡祴鍛戒护 + 姣忔浼氳瘽鑷姩鎺㈡祴涓€娆?*
+- [ ] **Step 2: 在 `src/main.ts` 接入探测命令 + 每次会话自动探测一次**
 
-鍦ㄦ枃浠堕《閮?import 澶勫姞鍏ワ細
+在文件顶部 import 处加入：
 
 ```ts
 import { probeNativePdfStructure } from "./pdf/nativePdfProbe";
 ```
 
-鍦?`onload()` 鍐呫€乣this.registerEvent(...)` 涔嬪悗鍔犲叆鑷姩鎺㈡祴閫昏緫锛堟瘡娆′細璇濆彧鑷姩璺戜竴娆★紝鎵撳紑 PDF 鍚庡欢杩熺瓑椤垫覆鏌撳畬鍐嶆帰娴嬶級锛?
+在 `onload()` 内、`this.registerEvent(...)` 之后加入自动探测逻辑（每次会话只自动跑一次，打开 PDF 后延迟等页渲染完再探测）：
+
 ```ts
 let nativePdfProbeDone = false;
 this.registerEvent(this.app.workspace.on("active-leaf-change", () => {
@@ -103,13 +117,13 @@ this.registerEvent(this.app.workspace.on("active-leaf-change", () => {
     console.log("[MobileInkProbe]", text);
     const pluginDir = this.manifest.dir ?? `.obsidian/plugins/${this.manifest.id}`;
     void this.app.vault.adapter.write(`${pluginDir}/native-pdf-probe.json`, text);
-    new Notice(`鎺㈡祴瀹屾垚: 椤靛€欓€?${result.candidatePageCount}, iframe=${result.iframeCount}, embed=${result.embeds.length}, pdfView=${result.pdfViewFound}銆傜粨鏋滃啓鍏?${pluginDir}/native-pdf-probe.json`);
+    new Notice(`探测完成: 页候选=${result.candidatePageCount}, iframe=${result.iframeCount}, embed=${result.embeds.length}, pdfView=${result.pdfViewFound}。结果写入 ${pluginDir}/native-pdf-probe.json`);
   }, 2000);
 }));
 
 this.addCommand({
   id: "probe-native-pdf-structure",
-  name: "鎺㈡祴鍘熺敓 PDF 瑙嗗浘缁撴瀯 (SPIKE)",
+  name: "探测原生 PDF 视图结构 (SPIKE)",
   checkCallback: (checking) => {
     const leaf = this.app.workspace.activeLeaf;
     const ok = !!leaf && leaf.getViewState().type === "pdf";
@@ -120,20 +134,22 @@ this.addCommand({
     console.log("[MobileInkProbe]", text);
     const pluginDir = this.manifest.dir ?? `.obsidian/plugins/${this.manifest.id}`;
     void this.app.vault.adapter.write(`${pluginDir}/native-pdf-probe.json`, text);
-    new Notice(`鎺㈡祴瀹屾垚: 椤靛€欓€?${result.candidatePageCount}, iframe=${result.iframeCount}, embed=${result.embeds.length}銆傜粨鏋滃啓鍏?${pluginDir}/native-pdf-probe.json`);
+    new Notice(`探测完成: 页候选=${result.candidatePageCount}, iframe=${result.iframeCount}, embed=${result.embeds.length}。结果写入 ${pluginDir}/native-pdf-probe.json`);
     return true;
   }
 });
 ```
 
-- [ ] **Step 3: 鐗堟湰鍗囧埌 1.1.16**
+- [ ] **Step 3: 版本升到 1.1.16**
 
-`package.json` 涓?`manifest.json` 鐨?`version` 瀛楁鏀逛负 `"1.1.16"`銆?
-- [ ] **Step 4: 鏋勫缓**
+`package.json` 与 `manifest.json` 的 `version` 字段改为 `"1.1.16"`。
+
+- [ ] **Step 4: 构建**
 
 Run: `npm run build`
-Expected: 鏃犺緭鍑洪敊璇紝閫€鍑虹爜 0锛坄tsc -noEmit` 閫氳繃 + esbuild 浜у嚭 main.js锛夈€?
-- [ ] **Step 5: 鎻愪氦骞舵墦 tag**
+Expected: 无输出错误，退出码 0（`tsc -noEmit` 通过 + esbuild 产出 main.js）。
+
+- [ ] **Step 5: 提交并打 tag**
 
 ```bash
 git add src/pdf/nativePdfProbe.ts src/main.ts package.json manifest.json main.js
@@ -141,33 +157,39 @@ git commit -m "feat(spike): probe native PDF view DOM structure on device"
 git tag v1.1.16-beta
 ```
 
-- [ ] **Step 6: 鎺ㄩ€佸苟鍙戝竷**
+- [ ] **Step 6: 推送并发布**
 
 ```bash
 git push "https://x-access-token:<PUSH_TOKEN>@github.com/XiaoA-Tang/mobile-ink-annotation.git" main v1.1.16-beta
 ```
 
-鐢?node 鍐?UTF8 body 鏂囦欢鍚?POST release锛坱ag 鍚?`v1.1.16-beta`銆乸rerelease銆佷腑鏂?body锛氳鏄庤繖鏄?SPIKE 鎺㈡祴鐗堬紝瑁呭ソ鍚庢墦寮€浠绘剰 PDF锛屼細鑷姩鐢熸垚 `native-pdf-probe.json`锛屾妸璇ユ枃浠跺唴瀹瑰弽棣堝洖鏉ワ級锛屽啀涓婁紶 main.js/manifest.json/styles.css 涓変釜 assets锛堟祦绋嬭 Global Constraints锛夈€?
-- [ ] **Step 7: 鐢ㄦ埛鐪熸満楠岃瘉锛堝彲琛屾€ч椄闂級**
+用 node 写 UTF8 body 文件后 POST release（tag 名 `v1.1.16-beta`、prerelease、中文 body：说明这是 SPIKE 探测版，装好后打开任意 PDF，会自动生成 `native-pdf-probe.json`，把该文件内容反馈回来），再上传 main.js/manifest.json/styles.css 三个 assets（流程见 Global Constraints）。
 
-鐢ㄦ埛瑁?1.1.16-beta锛屾墦寮€涓€涓椤?PDF锛岀瓑 2 绉掞紝鎶婃彃浠剁洰褰曚笅鐨?`native-pdf-probe.json` 鍐呭鍙嶉銆?**閫氳繃鍒ゆ嵁**锛歚candidatePageCount >= 1` 涓旀瘡涓〉鍊欓€?`canvases.length >= 1`锛宍iframeCount === 0`锛宍embeds.length === 0`銆傝嫢閫氳繃 鈫?缁х画 Task 2-6锛涜嫢椤靛€欓€変负 0 鎴?iframe/embed 闅旂 鈫?鍋滀笅鏉ヤ笌鐢ㄦ埛閲嶆柊璇勪及锛堣鐩栧眰涓嶅彲琛岋紝闄嶇骇涓烘柟妗?B 灏卞湴鍒囨崲锛夈€?
+- [ ] **Step 7: 用户真机验证（可行性闸门）**
+
+用户装 1.1.16-beta，打开一个多页 PDF，等 2 秒，把插件目录下的 `native-pdf-probe.json` 内容反馈。
+**通过判据**：`candidatePageCount >= 1` 且每个页候选 `canvases.length >= 1`，`iframeCount === 0`，`embeds.length === 0`。若通过 → 继续 Task 2-6；若页候选为 0 或 iframe/embed 隔离 → 停下来与用户重新评估（覆盖层不可行，降级为方案 B 就地切换）。
+
 ---
 
-### Task 2: 绾嚑浣曟ā鍧?+ 鍗曞厓娴嬭瘯
+### Task 2: 纯几何模块 + 单元测试
 
 **Files:**
 - Create: `src/pdf/nativePdfGeometry.ts`
 - Create: `scripts/test-native-pdf-geometry.mjs`
 
 **Interfaces:**
-- Consumes: `PdfJsDocument`锛堟潵鑷?`src/views/annotationTypes.ts`锛夈€乣PDF_BACKGROUND_PAGE_GAP`/`PDF_BACKGROUND_MOBILE_MAX_WIDTH`锛堟潵鑷?`src/views/annotationConstants.ts`锛夈€?- Produces锛圱ask 3銆?銆? 渚濊禆锛?
+- Consumes: `PdfJsDocument`（来自 `src/views/annotationTypes.ts`）、`PDF_BACKGROUND_PAGE_GAP`/`PDF_BACKGROUND_MOBILE_MAX_WIDTH`（来自 `src/views/annotationConstants.ts`）。
+- Produces（Task 3、5、6 依赖）:
   - `type LogicalPage = { pageNumber: number; offsetY: number; width: number; height: number }`
   - `type LogicalPageLayout = { pageWidth: number; pageHeight: number; pages: LogicalPage[] }`
   - `type ScreenRect = { left: number; top: number; width: number; height: number }`
-  - `computePageSizeFromPdf(pdf, scrollClientWidth, maxWidth?): Promise<{ width: number; height: number }>`锛堢敤绗?1 椤佃鍙ｅ湪 scale=1 涓嬫寜鐩爣瀹藉害鎹㈢畻锛?  - `buildUniformPageLayout(pageWidth, pageHeight, numPages): LogicalPageLayout`锛堥〉闂?offsetY 鍚?gap锛?  - `screenToLogical(page, rect, x, y): { x: number; y: number }`
+  - `computePageSizeFromPdf(pdf, scrollClientWidth, maxWidth?): Promise<{ width: number; height: number }>`（用第 1 页视口在 scale=1 下按目标宽度换算）
+  - `buildUniformPageLayout(pageWidth, pageHeight, numPages): LogicalPageLayout`（页间 offsetY 含 gap）
+  - `screenToLogical(page, rect, x, y): { x: number; y: number }`
   - `logicalToScreen(page, rect, x, y): { x: number; y: number }`
 
-- [ ] **Step 1: 鍐欏け璐ユ祴璇?`scripts/test-native-pdf-geometry.mjs`**
+- [ ] **Step 1: 写失败测试 `scripts/test-native-pdf-geometry.mjs`**
 
 ```js
 import { computePageSizeFromPdf, buildUniformPageLayout, screenToLogical, logicalToScreen } from "../src/pdf/nativePdfGeometry.ts";
@@ -193,18 +215,20 @@ const fakePdf = {
   }
 };
 
-// 1. computePageSizeFromPdf: scroll 瀹藉害 984 鈫?available=960 鈫?target=960, scale=960/612鈮?.5686
+// 1. computePageSizeFromPdf: scroll 宽度 984 → available=960 → target=960, scale=960/612≈1.5686
 const size = await computePageSizeFromPdf(fakePdf, 984);
 assert("page width from pdf", size.width, 960);
 assert("page height from pdf", size.height, Math.ceil(792 * (960 / 612)));
 
-// 2. uniform layout: offsetY 鍚?gap锛岄〉鍐呴珮搴︿竴鑷?const layout = buildUniformPageLayout(960, 1242, 3);
+// 2. uniform layout: offsetY 含 gap，页内高度一致
+const layout = buildUniformPageLayout(960, 1242, 3);
 assert("page count", layout.pages.length, 3);
 assert("page1 offsetY", layout.pages[0].offsetY, 0);
 assert("page2 offsetY", layout.pages[1].offsetY, 1242 + PDF_BACKGROUND_PAGE_GAP);
 assert("page3 offsetY", layout.pages[2].offsetY, (1242 + PDF_BACKGROUND_PAGE_GAP) * 2);
 
-// 3. screenToLogical / logicalToScreen 寰€杩斾竴鑷达紙page2锛屽惈 gap 鍋忕Щ锛?const rect = { left: 10, top: 20, width: 480, height: 621 };
+// 3. screenToLogical / logicalToScreen 往返一致（page2，含 gap 偏移）
+const rect = { left: 10, top: 20, width: 480, height: 621 };
 const logical = screenToLogical(layout.pages[1], rect, 10 + 240, 20 + 310.5);
 assert("logical x", logical.x, 480);
 assert("logical y", logical.y, 1242 + PDF_BACKGROUND_PAGE_GAP + 621);
@@ -212,7 +236,7 @@ const screen = logicalToScreen(layout.pages[1], rect, logical.x, logical.y);
 assert("roundtrip x", Math.round(screen.x), 250);
 assert("roundtrip y", Math.abs(screen.y - 330.5) < 0.001, true);
 
-// 4. 闈為浂淇濇姢锛歸idth/height 涓?0 鏃惰繑鍥炲師鍧愭爣涓?NaN
+// 4. 非零保护：width/height 为 0 时返回原坐标不 NaN
 const zero = screenToLogical(layout.pages[0], { left: 0, top: 0, width: 0, height: 0 }, 5, 5);
 assert("zero rect finite", [zero.x, zero.y].every(Number.isFinite), true);
 
@@ -223,11 +247,12 @@ if (failed > 0) {
 console.log("OK: all native-pdf-geometry assertions passed");
 ```
 
-- [ ] **Step 2: 杩愯纭澶辫触**
+- [ ] **Step 2: 运行确认失败**
 
 Run: `node --experimental-strip-types scripts/test-native-pdf-geometry.mjs`
-Expected: FAIL锛屾姤 `Cannot find module ... nativePdfGeometry.ts` 鎴?`computePageSizeFromPdf is not a function`銆?
-- [ ] **Step 3: 瀹炵幇 `src/pdf/nativePdfGeometry.ts`**
+Expected: FAIL，报 `Cannot find module ... nativePdfGeometry.ts` 或 `computePageSizeFromPdf is not a function`。
+
+- [ ] **Step 3: 实现 `src/pdf/nativePdfGeometry.ts`**
 
 ```ts
 import type { PdfJsDocument } from "../views/annotationTypes";
@@ -296,11 +321,12 @@ export function logicalToScreen(page: LogicalPage, rect: ScreenRect, x: number, 
 }
 ```
 
-- [ ] **Step 4: 杩愯纭閫氳繃**
+- [ ] **Step 4: 运行确认通过**
 
 Run: `node --experimental-strip-types scripts/test-native-pdf-geometry.mjs`
-Expected: 鍏ㄩ儴 ok + `OK: all native-pdf-geometry assertions passed`锛岄€€鍑虹爜 0銆?
-- [ ] **Step 5: 鎻愪氦**
+Expected: 全部 ok + `OK: all native-pdf-geometry assertions passed`，退出码 0。
+
+- [ ] **Step 5: 提交**
 
 ```bash
 git add src/pdf/nativePdfGeometry.ts scripts/test-native-pdf-geometry.mjs
@@ -309,17 +335,21 @@ git commit -m "feat: native PDF overlay geometry (logical layout + screen mappin
 
 ---
 
-### Task 3: 绗旇抗鏁版嵁灞傦紙鎸夐〉鎷嗗垎 + 鍧愭爣鎹㈢畻锛? 鍗曞厓娴嬭瘯
+### Task 3: 笔迹数据层（按页拆分 + 坐标换算）+ 单元测试
 
 **Files:**
 - Create: `src/pdf/overlayInkData.ts`
-- Modify: `scripts/test-native-pdf-geometry.mjs`锛堣拷鍔犳柇瑷€锛?
-**Interfaces:**
-- Consumes: `InkStroke`锛坄src/ink/types.ts`锛夈€乀ask 2 鐨?`LogicalPageLayout`/`LogicalPage`/`ScreenRect`/`screenToLogical`/`logicalToScreen`銆?- Produces锛圱ask 5銆? 渚濊禆锛?
-  - `assignStrokeToPage(stroke, layout): LogicalPage | null`锛堟寜绗旇抗涓偣 y 钀藉叆椤佃寖鍥达紝鏈€杩戦〉鍏滃簳锛?  - `splitStrokesByPage(strokes, layout): Map<number, InkStroke[]>`
-  - `convertStrokesToScreen(strokes, page, rect): InkStroke[]`锛堝潗鏍囦笌绾垮 `sqrt(scaleX*scaleY)` 缂╂斁锛?  - `convertStrokesToLogical(strokes, page, rect): InkStroke[]`
+- Modify: `scripts/test-native-pdf-geometry.mjs`（追加断言）
 
-- [ ] **Step 1: 鍏堝啓澶辫触娴嬭瘯锛堣拷鍔犲埌 `scripts/test-native-pdf-geometry.mjs` 鏈熬銆乣if (failed > 0)` 涔嬪墠锛?*
+**Interfaces:**
+- Consumes: `InkStroke`（`src/ink/types.ts`）、Task 2 的 `LogicalPageLayout`/`LogicalPage`/`ScreenRect`/`screenToLogical`/`logicalToScreen`。
+- Produces（Task 5、6 依赖）:
+  - `assignStrokeToPage(stroke, layout): LogicalPage | null`（按笔迹中点 y 落入页范围，最近页兜底）
+  - `splitStrokesByPage(strokes, layout): Map<number, InkStroke[]>`
+  - `convertStrokesToScreen(strokes, page, rect): InkStroke[]`（坐标与线宽 `sqrt(scaleX*scaleY)` 缩放）
+  - `convertStrokesToLogical(strokes, page, rect): InkStroke[]`
+
+- [ ] **Step 1: 先写失败测试（追加到 `scripts/test-native-pdf-geometry.mjs` 末尾、`if (failed > 0)` 之前）**
 
 ```js
 import { assignStrokeToPage, splitStrokesByPage, convertStrokesToScreen, convertStrokesToLogical } from "../src/pdf/overlayInkData.ts";
@@ -350,11 +380,12 @@ assert("toLogical y", Math.round(back[0].points[0].y), 500);
 assert("toLogical width", Math.round(back[0].width), 2);
 ```
 
-- [ ] **Step 2: 杩愯纭澶辫触**
+- [ ] **Step 2: 运行确认失败**
 
 Run: `node --experimental-strip-types scripts/test-native-pdf-geometry.mjs`
-Expected: FAIL锛宍Cannot find module ... overlayInkData.ts`銆?
-- [ ] **Step 3: 瀹炵幇 `src/pdf/overlayInkData.ts`**
+Expected: FAIL，`Cannot find module ... overlayInkData.ts`。
+
+- [ ] **Step 3: 实现 `src/pdf/overlayInkData.ts`**
 
 ```ts
 import { InkStroke } from "../ink/types";
@@ -434,11 +465,12 @@ function getStrokeBounds(stroke: InkStroke): { y: number; height: number } | nul
 }
 ```
 
-- [ ] **Step 4: 杩愯纭閫氳繃**
+- [ ] **Step 4: 运行确认通过**
 
 Run: `node --experimental-strip-types scripts/test-native-pdf-geometry.mjs`
-Expected: 鍏ㄩ儴 ok + `OK: all native-pdf-geometry assertions passed`銆?
-- [ ] **Step 5: 鎻愪氦**
+Expected: 全部 ok + `OK: all native-pdf-geometry assertions passed`。
+
+- [ ] **Step 5: 提交**
 
 ```bash
 git add src/pdf/overlayInkData.ts scripts/test-native-pdf-geometry.mjs
@@ -447,17 +479,20 @@ git commit -m "feat: overlay ink data layer (per-page split + screen/logical con
 
 ---
 
-### Task 4: NativePdfOverlayManager 楠ㄦ灦 鈥?妫€娴嬪師鐢?PDF leaf + 鎮诞绗旀寜閽?
+### Task 4: NativePdfOverlayManager 骨架 — 检测原生 PDF leaf + 悬浮笔按钮
+
 **Files:**
 - Create: `src/pdf/NativePdfOverlayManager.ts`
 - Modify: `src/main.ts`
 - Modify: `styles.css`
 
 **Interfaces:**
-- Consumes: `StrokeStore`锛坄src/ink/StrokeStore.ts`锛夈€乣probeNativePdfStructure`锛圱ask 1锛屼粎鍙傝€冩娴嬫€濊矾锛屼笉鐩存帴璋冪敤锛夈€?- Produces锛圱ask 5銆? 渚濊禆锛?
+- Consumes: `StrokeStore`（`src/ink/StrokeStore.ts`）、`probeNativePdfStructure`（Task 1，仅参考检测思路，不直接调用）。
+- Produces（Task 5、6 依赖）:
   - `class NativePdfOverlayManager { constructor(app: App, store: StrokeStore); onload(): void; onunload(): void; }`
-  - 绉佹湁鏂规硶 `update()`, `attachPenButton(leaf)`, `removePenButton()`, `enterDrawMode(leaf)`锛圱ask 5 瀹炵幇浣擄級銆?
-- [ ] **Step 1: 瀹炵幇 `src/pdf/NativePdfOverlayManager.ts`锛堥鏋?+ 绗旀寜閽級**
+  - 私有方法 `update()`, `attachPenButton(leaf)`, `removePenButton()`, `enterDrawMode(leaf)`（Task 5 实现体）。
+
+- [ ] **Step 1: 实现 `src/pdf/NativePdfOverlayManager.ts`（骨架 + 笔按钮）**
 
 ```ts
 import { App, Platform, setIcon, TFile, WorkspaceLeaf } from "obsidian";
@@ -510,7 +545,7 @@ export class NativePdfOverlayManager {
   private attachPenButton(leaf: WorkspaceLeaf): void {
     const button = leaf.view.containerEl.createEl("button", {
       cls: NATIVE_PEN_BUTTON_CLS,
-      attr: { "aria-label": "灏卞湴鎵嬪啓鎵规敞" }
+      attr: { "aria-label": "就地手写批注" }
     });
     setIcon(button, "pencil");
     button.addEventListener("click", () => void this.enterDrawMode(leaf));
@@ -529,13 +564,15 @@ export class NativePdfOverlayManager {
     if (!(file instanceof TFile) || file.extension !== "pdf") return;
     this.drawModeLeaf = leaf;
     this.removePenButton();
-    // Task 5 濉厖锛氬姞杞芥爣娉?鈫?璁＄畻甯冨眬 鈫?寤鸿鐩栧眰涓庨€愰〉澧ㄨ抗寮曟搸
-    // Task 6 濉厖锛氬伐鍏锋爮銆佷繚瀛樸€侀€€鍑?  }
+    // Task 5 填充：加载标注 → 计算布局 → 建覆盖层与逐页墨迹引擎
+    // Task 6 填充：工具栏、保存、退出
+  }
 
   private async exitDrawMode(): Promise<void> {
     const leaf = this.drawModeLeaf;
     this.drawModeLeaf = null;
-    // Task 6 濉厖锛歠lush 淇濆瓨 + 鍗歌浇瑕嗙洊灞?    if (leaf) {
+    // Task 6 填充：flush 保存 + 卸载覆盖层
+    if (leaf) {
       this.currentLeaf = null;
       this.update();
     }
@@ -543,31 +580,34 @@ export class NativePdfOverlayManager {
 }
 ```
 
-娉細`Platform` 鍦?Task 5 鐢ㄤ簬 `resolveInkCanvasBudget(Platform.isMobile)`锛宨mport 淇濈暀锛圱ask 5 鐢ㄥ埌锛夈€?
-- [ ] **Step 2: 鍦?`src/main.ts` 瀹炰緥鍖?Manager**
+注：`Platform` 在 Task 5 用于 `resolveInkCanvasBudget(Platform.isMobile)`，import 保留（Task 5 用到）。
 
-鍦?import 澶勫姞鍏ワ細
+- [ ] **Step 2: 在 `src/main.ts` 实例化 Manager**
+
+在 import 处加入：
 
 ```ts
 import { NativePdfOverlayManager } from "./pdf/NativePdfOverlayManager";
 ```
 
-鍦?`onload()` 鍐呫€乣this.store = new StrokeStore(...)` 涔嬪悗锛?
+在 `onload()` 内、`this.store = new StrokeStore(...)` 之后：
+
 ```ts
 this.nativePdfOverlay = new NativePdfOverlayManager(this.app, this.store);
 this.nativePdfOverlay.onload();
 ```
 
-鍦ㄧ被涓婂０鏄庡瓧娈碉細`private nativePdfOverlay!: NativePdfOverlayManager;`
+在类上声明字段：`private nativePdfOverlay!: NativePdfOverlayManager;`
 
-鍦?`onunload()` 鍐呫€乣detachLeavesOfType` 涔嬪墠锛?
+在 `onunload()` 内、`detachLeavesOfType` 之前：
+
 ```ts
 this.nativePdfOverlay?.onunload();
 ```
 
-- [ ] **Step 3: 鍦?`styles.css` 杩藉姞鏍峰紡**
+- [ ] **Step 3: 在 `styles.css` 追加样式**
 
-杩藉姞鍒版枃浠舵湯灏撅細
+追加到文件末尾：
 
 ```css
 .mobile-ink-native-pen-button {
@@ -592,33 +632,38 @@ this.nativePdfOverlay?.onunload();
 }
 ```
 
-- [ ] **Step 4: 鏋勫缓**
+- [ ] **Step 4: 构建**
 
 Run: `npm run build`
-Expected: 閫€鍑虹爜 0锛屾棤绫诲瀷閿欒銆?
-- [ ] **Step 5: 鎻愪氦**
+Expected: 退出码 0，无类型错误。
+
+- [ ] **Step 5: 提交**
 
 ```bash
 git add src/pdf/NativePdfOverlayManager.ts src/main.ts styles.css main.js
 git commit -m "feat: native PDF overlay manager skeleton with floating pen button"
 ```
 
-- [ ] **Step 6: 璁惧楠岃瘉锛堜笉鍙戝竷锛岀洿鎺ヨ鏈湴鏋勫缓楠岃瘉锛?*
+- [ ] **Step 6: 设备验证（不发布，直接装本地构建验证）**
 
-鍦ㄥ钩鏉夸笂鍚敤鎻掍欢锛屾墦寮€鍘熺敓 PDF锛氬彸涓嬭鍑虹幇绗旀寜閽紱鐐规寜閽笉鎶ラ敊锛堢洰鍓嶆棤瑕嗙洊灞傦紝琛屼负涓虹┖锛夛紱鍒囨崲/鍏抽棴 PDF锛屾寜閽纭秷澶便€傝嫢鏈鏈湴鐗堬紝鍙烦杩囨姝ワ紝闅?Task 6 涓€骞堕獙璇併€?
+在平板上启用插件，打开原生 PDF：右下角出现笔按钮；点按钮不报错（目前无覆盖层，行为为空）；切换/关闭 PDF，按钮正确消失。若未装本地版，可跳过此步，随 Task 6 一并验证。
+
 ---
 
-### Task 5: 缁樼敾妯″紡 鈥?瑕嗙洊灞?+ 閫愰〉澧ㄨ抗寮曟搸 + 鎸囬拡/鎵嬪娍閿佸畾
+### Task 5: 绘画模式 — 覆盖层 + 逐页墨迹引擎 + 指针/手势锁定
 
 **Files:**
 - Modify: `src/pdf/NativePdfOverlayManager.ts`
 - Modify: `styles.css`
 
 **Interfaces:**
-- Consumes: Task 2 `computePageSizeFromPdf`/`buildUniformPageLayout`/`LogicalPageLayout`/`ScreenRect`锛汿ask 3 `splitStrokesByPage`/`convertStrokesToScreen`/`convertStrokesToLogical`锛沗InkEngine`锛坄src/ink/InkEngine.ts`锛屾瀯閫?`(liveCanvas, committedCanvas, scrollEl, options)`锛屾柟娉?`resize`/`setDisplayScale`/`loadStrokes`/`getStrokes`/`setToolState`/`undo`/`redo`/`destroy`/`setInputEnabled`锛夛紱`resolveInkCanvasBudget`锛坄src/ink/inkBudget.ts`锛夛紱`loadPdfJs`锛圤bsidian API锛夛紱`PdfJsLib`/`PdfJsDocument`锛坄src/views/annotationTypes.ts`锛夈€?- Produces锛圱ask 6 渚濊禆锛? 绉佹湁瀛楁 `this.engines: Array<{ engine: InkEngine; page: LogicalPage; rect: ScreenRect; live: HTMLCanvasElement; committed: HTMLCanvasElement }>`锛涚鏈夊瓧娈?`this.toolState: InkToolState`锛涙柟娉?`getVisiblePages(containerEl): Array<{ pageNumber: number; rect: ScreenRect }>`锛沗enterDrawMode`/`exitDrawMode` 瀹屾暣瀹炵幇锛堝惈澧ㄨ抗灞傦紝涓嶅惈宸ュ叿鏍忥級銆?
-- [ ] **Step 1: 閲嶅啓 `enterDrawMode` / `exitDrawMode`锛屽姞鍏ヨ鐩栧眰涓庨€愰〉寮曟搸**
+- Consumes: Task 2 `computePageSizeFromPdf`/`buildUniformPageLayout`/`LogicalPageLayout`/`ScreenRect`；Task 3 `splitStrokesByPage`/`convertStrokesToScreen`/`convertStrokesToLogical`；`InkEngine`（`src/ink/InkEngine.ts`，构造 `(liveCanvas, committedCanvas, scrollEl, options)`，方法 `resize`/`setDisplayScale`/`loadStrokes`/`getStrokes`/`setToolState`/`undo`/`redo`/`destroy`/`setInputEnabled`）；`resolveInkCanvasBudget`（`src/ink/inkBudget.ts`）；`loadPdfJs`（Obsidian API）；`PdfJsLib`/`PdfJsDocument`（`src/views/annotationTypes.ts`）。
+- Produces（Task 6 依赖）: 私有字段 `this.engines: Array<{ engine: InkEngine; page: LogicalPage; rect: ScreenRect; live: HTMLCanvasElement; committed: HTMLCanvasElement }>`；私有字段 `this.toolState: InkToolState`；方法 `getVisiblePages(containerEl): Array<{ pageNumber: number; rect: ScreenRect }>`；`enterDrawMode`/`exitDrawMode` 完整实现（含墨迹层，不含工具栏）。
 
-鍦?`NativePdfOverlayManager.ts` 椤堕儴 import 琛ュ叏锛?
+- [ ] **Step 1: 重写 `enterDrawMode` / `exitDrawMode`，加入覆盖层与逐页引擎**
+
+在 `NativePdfOverlayManager.ts` 顶部 import 补全：
+
 ```ts
 import { App, loadPdfJs, Platform, setIcon, TFile, WorkspaceLeaf } from "obsidian";
 import { StrokeStore } from "../ink/StrokeStore";
@@ -644,7 +689,8 @@ export const NATIVE_OVERLAY_CAPTURE_CLS = "mobile-ink-native-capture";
 export const NATIVE_OVERLAY_PAGE_CANVAS_CLS = "mobile-ink-native-page-canvas";
 ```
 
-鍦ㄧ被鍐呮柊澧炲瓧娈典笌甯搁噺锛?
+在类内新增字段与常量：
+
 ```ts
 private overlay: HTMLElement | null = null;
 private captureLayer: HTMLElement | null = null;
@@ -661,7 +707,7 @@ private saveTimer: number | null = null;
 private dirty = false;
 ```
 
-鏇挎崲 `enterDrawMode` 瀹炵幇涓猴細
+替换 `enterDrawMode` 实现为：
 
 ```ts
 private async enterDrawMode(leaf: WorkspaceLeaf): Promise<void> {
@@ -673,7 +719,7 @@ private async enterDrawMode(leaf: WorkspaceLeaf): Promise<void> {
       await this.setupDrawMode(leaf, file);
     } catch (error) {
       console.error("Mobile Ink Annotation: failed to enter draw mode", error);
-      new Notice("灏卞湴涔﹀啓妯″紡鍚姩澶辫触: " + String(error));
+      new Notice("就地书写模式启动失败: " + String(error));
       this.drawModeLeaf = null;
       this.teardownDrawMode();
       this.update();
@@ -686,7 +732,8 @@ private async setupDrawMode(leaf: WorkspaceLeaf, file: TFile): Promise<void> {
   this.drawFile = file;
   const scrollClientWidth = Math.max(320, containerEl.clientWidth || window.innerWidth);
 
-  // 1. 閫昏緫甯冨眬锛氫紭鍏堢敤宸插瓨 annotation 鐨?pageWidth/pageHeight锛屽惁鍒欎粠 pdfjs 绗?1 椤佃鍙ｆ帹绠?  let layout: LogicalPageLayout | null = null;
+  // 1. 逻辑布局：优先用已存 annotation 的 pageWidth/pageHeight，否则从 pdfjs 第 1 页视口推算
+  let layout: LogicalPageLayout | null = null;
   const pdfjsLib = (await loadPdfJs()) as PdfJsLib;
   const data = new Uint8Array(await this.app.vault.readBinary(file));
   const pdf = (await pdfjsLib.getDocument({ data }).promise) as PdfJsDocument;
@@ -699,17 +746,20 @@ private async setupDrawMode(leaf: WorkspaceLeaf, file: TFile): Promise<void> {
   layout = buildUniformPageLayout(pageWidth, pageHeight, pdf.numPages);
   this.layout = layout;
 
-  // 2. 鍏ㄩ儴绗旇抗鎸夐〉鎷嗗垎锛堟湭鍒嗗埌椤电殑鍏滃簳淇濈暀鍦?page1锛?  this.pageStrokes = splitStrokesByPage(annotation.strokes, layout);
+  // 2. 全部笔迹按页拆分（未分到页的兜底保留在 page1）
+  this.pageStrokes = splitStrokesByPage(annotation.strokes, layout);
   const orphanStrokes = annotation.strokes.filter((s) => !assignStrokeToPage(s, layout));
   if (orphanStrokes.length > 0) {
     const p1 = this.pageStrokes.get(1) ?? [];
     this.pageStrokes.set(1, [...orphanStrokes, ...p1]);
   }
 
-  // 3. 瑕嗙洊灞?+ 鎹曡幏灞?  this.overlay = containerEl.createDiv({ cls: NATIVE_OVERLAY_CLS, attr: { "aria-hidden": "true" } });
+  // 3. 覆盖层 + 捕获层
+  this.overlay = containerEl.createDiv({ cls: NATIVE_OVERLAY_CLS, attr: { "aria-hidden": "true" } });
   this.captureLayer = this.overlay.createDiv({ cls: NATIVE_OVERLAY_CAPTURE_CLS });
 
-  // 4. 鍙椤靛紩鎿?  const pages = this.getVisiblePages(containerEl);
+  // 4. 可见页引擎
+  const pages = this.getVisiblePages(containerEl);
   for (const { pageNumber, rect } of pages) {
     const page = layout.pages[pageNumber - 1];
     if (!page) continue;
@@ -807,7 +857,7 @@ private async flushSave(): Promise<void> {
 }
 ```
 
-鏇挎崲 `exitDrawMode` 瀹炵幇涓猴細
+替换 `exitDrawMode` 实现为：
 
 ```ts
 private async exitDrawMode(): Promise<void> {
@@ -836,7 +886,8 @@ private teardownDrawMode(): void {
 }
 ```
 
-淇 import锛歚overlayInkData` 鐨?import 闇€瑕佸姞涓?`assignStrokeToPage`锛沗InkStroke` 浠?`../ink/types` import锛沗new Notice` 浠?`obsidian` import銆傚皢 `NATIVE_PEN_BUTTON_CLS` 鏀逛负浠庢湰鏂囦欢瀵煎嚭锛堝畠宸插畾涔夛紝鍘绘帀 import 琛岋級銆傛渶缁堝ご閮?import 搴斾负锛?
+修正 import：`overlayInkData` 的 import 需要加上 `assignStrokeToPage`；`InkStroke` 从 `../ink/types` import；`new Notice` 从 `obsidian` import。将 `NATIVE_PEN_BUTTON_CLS` 改为从本文件导出（它已定义，去掉 import 行）。最终头部 import 应为：
+
 ```ts
 import { App, loadPdfJs, Notice, Platform, setIcon, TFile, WorkspaceLeaf } from "obsidian";
 import { StrokeStore } from "../ink/StrokeStore";
@@ -848,7 +899,7 @@ import { buildUniformPageLayout, computePageSizeFromPdf, LogicalPage, LogicalPag
 import { assignStrokeToPage, convertStrokesToLogical, convertStrokesToScreen, splitStrokesByPage } from "./overlayInkData";
 ```
 
-- [ ] **Step 2: 鎵嬪娍閿佸畾锛堝湪 `setupDrawMode` 鏈熬杩藉姞锛?*
+- [ ] **Step 2: 手势锁定（在 `setupDrawMode` 末尾追加）**
 
 ```ts
 const blockGesture = (event: Event): void => {
@@ -867,8 +918,9 @@ this._gestureCleanup = () => {
 };
 ```
 
-骞舵柊澧炲瓧娈?`private _gestureCleanup: (() => void) | null = null;`锛屽湪 `teardownDrawMode` 閲?`this._gestureCleanup?.(); this._gestureCleanup = null;`銆?
-- [ ] **Step 3: 鍦?`styles.css` 杩藉姞瑕嗙洊灞傛牱寮?*
+并新增字段 `private _gestureCleanup: (() => void) | null = null;`，在 `teardownDrawMode` 里 `this._gestureCleanup?.(); this._gestureCleanup = null;`。
+
+- [ ] **Step 3: 在 `styles.css` 追加覆盖层样式**
 
 ```css
 .mobile-ink-native-overlay {
@@ -888,31 +940,36 @@ this._gestureCleanup = () => {
 }
 ```
 
-- [ ] **Step 4: 鏋勫缓**
+- [ ] **Step 4: 构建**
 
 Run: `npm run build`
-Expected: 閫€鍑虹爜 0锛屾棤绫诲瀷閿欒锛堣嫢 `InkEngine` 鏌愬瓧娈电被鍨嬩笉鍖归厤锛屼互瀹為檯绛惧悕涓哄噯寰皟锛屼緥濡?`initialToolState` 绫诲瀷锛夈€?
-- [ ] **Step 5: 鎻愪氦**
+Expected: 退出码 0，无类型错误（若 `InkEngine` 某字段类型不匹配，以实际签名为准微调，例如 `initialToolState` 类型）。
+
+- [ ] **Step 5: 提交**
 
 ```bash
 git add src/pdf/NativePdfOverlayManager.ts styles.css main.js
 git commit -m "feat: in-place draw mode with per-page ink engines and gesture lock on native PDF view"
 ```
 
-- [ ] **Step 6: 璁惧楠岃瘉锛堜复鏃惰烦杩囧伐鍏锋爮锛岀敤榛樿绗斿伐鍏凤級**
+- [ ] **Step 6: 设备验证（临时跳过工具栏，用默认笔工具）**
 
-鍦ㄥ钩鏉夸笂锛氳鏈湴鏋勫缓 鈫?鎵撳紑 PDF 鈫?鐐圭瑪鎸夐挳 鈫?鍦ㄩ〉闈笂鐢ㄧ瑪/鎵嬫寚锛坄acceptTouchInput` 榛樿 false锛屼粎鎵嬪啓绗旓紱濡傞渶鎵嬫寚鍏堜复鏃剁疆 true 楠岃瘉锛夌敾绾?鈫?閫€鍑烘寜閽殏鏃狅紝鐢?杩斿洖/鍏抽棴 PDF"瑙﹀彂 `layout-change` 閫€鍑哄苟淇濆瓨 鈫?妫€鏌?`.ink.json` 鏄惁鍐欏叆銆佸潗鏍囨槸鍚﹀悎鐞嗐€傛椤逛笌 Task 6 宸ュ叿鏍忓畬鎴愬悗涓€骞跺洖褰掑嵆鍙€?
+在平板上：装本地构建 → 打开 PDF → 点笔按钮 → 在页面上用笔/手指（`acceptTouchInput` 默认 false，仅手写笔；如需手指先临时置 true 验证）画线 → 退出按钮暂无，用"返回/关闭 PDF"触发 `layout-change` 退出并保存 → 检查 `.ink.json` 是否写入、坐标是否合理。此项与 Task 6 工具栏完成后一并回归即可。
+
 ---
 
-### Task 6: 宸ュ叿鏍?+ 淇濆瓨/閫€鍑?+ 鍙戝竷 1.2.0-beta
+### Task 6: 工具栏 + 保存/退出 + 发布 1.2.0-beta
 
 **Files:**
 - Modify: `src/pdf/NativePdfOverlayManager.ts`
 - Modify: `styles.css`
-- Modify: `package.json`銆乣manifest.json`锛堢増鏈?鈫?1.2.0锛?
+- Modify: `package.json`、`manifest.json`（版本 → 1.2.0）
+
 **Interfaces:**
-- Consumes: Task 5 鍏ㄩ儴瀛楁涓?`markDirty`/`flushSave`/`teardownDrawMode`锛沗setIcon`锛坥bsidian锛夛紱`refreshToolbar()`锛堟湰浠诲姟鏂板锛夈€?- Produces: 鏈换鍔℃柊澧炵鏈夋柟娉?`buildToolbar(containerEl)`銆乣refreshToolbar()`銆乣applyToolState(patch)`銆乣exitButton` 鍥炶皟銆?
-- [ ] **Step 1: 鍦ㄧ被鍐呮柊澧炲伐鍏锋爮鏂规硶涓庣姸鎬佸埛鏂?*
+- Consumes: Task 5 全部字段与 `markDirty`/`flushSave`/`teardownDrawMode`；`setIcon`（obsidian）；`refreshToolbar()`（本任务新增）。
+- Produces: 本任务新增私有方法 `buildToolbar(containerEl)`、`refreshToolbar()`、`applyToolState(patch)`、`exitButton` 回调。
+
+- [ ] **Step 1: 在类内新增工具栏方法与状态刷新**
 
 ```ts
 private toolbar: HTMLElement | null = null;
@@ -922,15 +979,15 @@ private buildToolbar(containerEl: HTMLElement): void {
   const bar = containerEl.createDiv({ cls: "mobile-ink-native-toolbar" });
   this.toolbar = bar;
   const tools: Array<{ key: string; icon: string; label: string; action: () => void }> = [
-    { key: "pen", icon: "pen-tool", label: "绗?, action: () => this.applyToolState({ tool: "pen" }) },
-    { key: "highlighter", icon: "highlighter", label: "鑽у厜绗?, action: () => this.applyToolState({ tool: "highlighter" }) },
-    { key: "eraser", icon: "eraser", label: "姗＄毊", action: () => this.applyToolState({ tool: "eraser" }) },
-    { key: "undo", icon: "undo-2", label: "鎾ら攢", action: () => { for (const e of this.engines) e.engine.undo(); this.refreshToolbar(); } },
-    { key: "redo", icon: "redo-2", label: "閲嶅仛", action: () => { for (const e of this.engines) e.engine.redo(); this.refreshToolbar(); } },
-    { key: "color", icon: "palette", label: "棰滆壊", action: () => this.cycleColor() },
-    { key: "width", icon: "sliders-horizontal", label: "绾垮", action: () => this.cycleWidth() },
-    { key: "save", icon: "checkmark", label: "淇濆瓨", action: () => void this.flushSave() },
-    { key: "exit", icon: "x", label: "閫€鍑?, action: () => void this.exitDrawMode() }
+    { key: "pen", icon: "pen-tool", label: "笔", action: () => this.applyToolState({ tool: "pen" }) },
+    { key: "highlighter", icon: "highlighter", label: "荧光笔", action: () => this.applyToolState({ tool: "highlighter" }) },
+    { key: "eraser", icon: "eraser", label: "橡皮", action: () => this.applyToolState({ tool: "eraser" }) },
+    { key: "undo", icon: "undo-2", label: "撤销", action: () => { for (const e of this.engines) e.engine.undo(); this.refreshToolbar(); } },
+    { key: "redo", icon: "redo-2", label: "重做", action: () => { for (const e of this.engines) e.engine.redo(); this.refreshToolbar(); } },
+    { key: "color", icon: "palette", label: "颜色", action: () => this.cycleColor() },
+    { key: "width", icon: "sliders-horizontal", label: "线宽", action: () => this.cycleWidth() },
+    { key: "save", icon: "checkmark", label: "保存", action: () => void this.flushSave() },
+    { key: "exit", icon: "x", label: "退出", action: () => void this.exitDrawMode() }
   ];
   for (const t of tools) {
     const btn = bar.createEl("button", { cls: "mobile-ink-native-tool", attr: { "aria-label": t.label } });
@@ -973,14 +1030,15 @@ private cycleWidth(): void {
 }
 ```
 
-- [ ] **Step 2: 鍦?`setupDrawMode` 鐨勮鐩栧眰鍒涘缓鍚庤皟鐢ㄥ伐鍏锋爮**
+- [ ] **Step 2: 在 `setupDrawMode` 的覆盖层创建后调用工具栏**
 
-鍦?`this.captureLayer = this.overlay.createDiv(...)` 涔嬪悗銆乣getVisiblePages` 涔嬪墠鎻掑叆锛?
+在 `this.captureLayer = this.overlay.createDiv(...)` 之后、`getVisiblePages` 之前插入：
+
 ```ts
 this.buildToolbar(this.overlay);
 ```
 
-- [ ] **Step 3: 宸ュ叿鏍忔牱寮忚拷鍔犲埌 `styles.css`**
+- [ ] **Step 3: 工具栏样式追加到 `styles.css`**
 
 ```css
 .mobile-ink-native-toolbar {
@@ -1015,18 +1073,31 @@ this.buildToolbar(this.overlay);
 }
 ```
 
-- [ ] **Step 4: 鏋勫缓 + 鍗曞厓娴嬭瘯鍥炲綊**
+- [ ] **Step 4: 构建 + 单元测试回归**
 
 Run: `npm run build`
-Expected: 閫€鍑虹爜 0銆?Run: `node --experimental-strip-types scripts/test-canvas-budget.mjs`
-Expected: `OK: all canvas budget assertions passed`銆?Run: `node --experimental-strip-types scripts/test-native-pdf-geometry.mjs`
-Expected: `OK: all native-pdf-geometry assertions passed`銆?
-- [ ] **Step 5: 鐪熸満瀹屾暣楠岃瘉娓呭崟**
+Expected: 退出码 0。
+Run: `node --experimental-strip-types scripts/test-canvas-budget.mjs`
+Expected: `OK: all canvas budget assertions passed`。
+Run: `node --experimental-strip-types scripts/test-native-pdf-geometry.mjs`
+Expected: `OK: all native-pdf-geometry assertions passed`。
 
-鍦ㄥ钩鏉夸笂瑁呮湰鍦版瀯寤猴紝閫愰」楠岃瘉锛?1. 鎵撳紑澶氶〉 PDF 鈫?鍙充笅瑙掔瑪鎸夐挳鍑虹幇銆?2. 鐐圭瑪鎸夐挳 鈫?杩涘叆缁樼敾妯″紡锛岄《閮ㄥ伐鍏锋爮鍑虹幇锛岄〉闈粛鍙銆?3. 鐢ㄦ墜鍐欑瑪鍦ㄩ〉闈功鍐?鈫?绗旇抗鍗虫椂鏄剧ず锛涙崲鑽у厜绗?棰滆壊/绾垮鐢熸晥锛涙鐨摝闄ょ敓鏁堬紱鎾ら攢/閲嶅仛鐢熸晥銆?4. 鍙屾寚鎹忓悎/婊氬姩鍦ㄧ粯鐢绘ā寮忎笅涓嶇Щ鍔ㄩ〉闈紙閿佸畾鐢熸晥锛夈€?5. 鐐?淇濆瓨" 鈫?`.ink.json` 鏇存柊锛涚偣"閫€鍑? 鈫?瑕嗙洊灞傛秷澶憋紝鍘熺敓瑙嗗浘鍙甯哥缉鏀剧炕椤点€?6. 閲嶆柊杩涘叆缁樼敾妯″紡 鈫?涔嬪墠鍐欑殑绗旇抗鏄剧ず鍦ㄦ纭綅缃€?7. 鎵撳紑鐜版湁瀹屾暣鏍囨敞瑙嗗浘锛坮ibbon/鍛戒护锛夆啋 瑕嗙洊灞傚啓鐨勭瑪杩瑰湪閭ｉ噷涔熸樉绀哄湪鍚屼竴浣嶇疆銆?8. 鍦ㄥ畬鏁存爣娉ㄨ鍥鹃噷鍐欑殑绗旇抗锛屽洖鍒拌鐩栧眰鍚屾牱鏄剧ず銆?
-- [ ] **Step 6: 鐗堟湰鍗囧埌 1.2.0 骞跺彂甯?*
+- [ ] **Step 5: 真机完整验证清单**
 
-`package.json` 涓?`manifest.json` 鐨?`version` 鏀逛负 `"1.2.0"`銆傛瀯寤哄悗锛?
+在平板上装本地构建，逐项验证：
+1. 打开多页 PDF → 右下角笔按钮出现。
+2. 点笔按钮 → 进入绘画模式，顶部工具栏出现，页面仍可见。
+3. 用手写笔在页面书写 → 笔迹即时显示；换荧光笔/颜色/线宽生效；橡皮擦除生效；撤销/重做生效。
+4. 双指捏合/滚动在绘画模式下不移动页面（锁定生效）。
+5. 点"保存" → `.ink.json` 更新；点"退出" → 覆盖层消失，原生视图可正常缩放翻页。
+6. 重新进入绘画模式 → 之前写的笔迹显示在正确位置。
+7. 打开现有完整标注视图（ribbon/命令）→ 覆盖层写的笔迹在那里也显示在同一位置。
+8. 在完整标注视图里写的笔迹，回到覆盖层同样显示。
+
+- [ ] **Step 6: 版本升到 1.2.0 并发布**
+
+`package.json` 与 `manifest.json` 的 `version` 改为 `"1.2.0"`。构建后：
+
 ```bash
 git add src/pdf/NativePdfOverlayManager.ts styles.css package.json manifest.json main.js
 git commit -m "feat: in-place native PDF handwriting mode with toolbar (pen/highlighter/eraser/undo/redo/color/width/save/exit)"
@@ -1034,15 +1105,29 @@ git tag v1.2.0-beta
 git push "https://x-access-token:<PUSH_TOKEN>@github.com/XiaoA-Tang/mobile-ink-annotation.git" main v1.2.0-beta
 ```
 
-鐢?node 鍐?UTF8 body 鍚?POST release锛坱ag `v1.2.0-beta`銆乸rerelease銆佷腑鏂?body 璇存槑鍔熻兘涓庨獙璇佺偣锛夛紝涓婁紶 main.js/manifest.json/styles.css 涓変釜 assets銆?
-- [ ] **Step 7: 鐢ㄦ埛鍥炲綊 + 鏀跺熬**
+用 node 写 UTF8 body 后 POST release（tag `v1.2.0-beta`、prerelease、中文 body 说明功能与验证点），上传 main.js/manifest.json/styles.css 三个 assets。
 
-鐢ㄦ埛瀹夎 v1.2.0-beta 鐪熸満鍥炲綊锛涘鏈夐棶棰樻寜鍙嶉杩唬銆傜‘璁ょǔ瀹氬悗锛屽皢 `src/pdf/nativePdfProbe.ts` 鐨勮嚜鍔ㄦ帰娴嬩笌鍛戒护淇濈暀锛堜綆椋庨櫓锛屼究浜庢棩鍚庤瘖鏂級锛屾棤闇€鍒犻櫎銆?
+- [ ] **Step 7: 用户回归 + 收尾**
+
+用户安装 v1.2.0-beta 真机回归；如有问题按反馈迭代。确认稳定后，将 `src/pdf/nativePdfProbe.ts` 的自动探测与命令保留（低风险，便于日后诊断），无需删除。
+
 ---
 
 ## Self-Review
 
-**Spec 瑕嗙洊瀵圭収锛?*
-- 鍏ュ彛/鍑哄彛锛堢瑪鎸夐挳銆佽繘鍏?閫€鍑恒€佸懡浠わ級鈫?Task 4銆?銆?- 鍑犱綍瀵归綈锛堥〉鍏冪礌 rect + 鑷湁 pdfjs 閫昏緫灏哄 + 鍧愭爣鎹㈢畻锛夆啋 Task 2銆?銆?- 澧ㄨ抗灞傦紙澶嶇敤 InkEngine銆侀绠椼€佹棤 desync 浜?committed锛夆啋 Task 5锛圛nkEngine 鏋勯€犳部鐢?renderer 榛樿锛歝ommitted 宸茬敱 v1.1.15 鍥哄畾涓?`desynchronized:false`锛屾澶勬棤闇€閲嶅澶勭悊锛沚acking 棰勭畻鐢?`resolveInkCanvasBudget` 浼犲叆锛夈€?- 鎵嬪娍閿佸畾锛堢粯鐢绘ā寮忛攣瀹氱缉鏀?婊氬姩锛夆啋 Task 5 Step 2銆?- 宸ュ叿闆嗭紙鍚崸鍏夌瑪锛夆啋 Task 6銆?- 鏁版嵁浜掗€氾紙鍚?Store/鍚屽潗鏍囷級鈫?Task 3銆?銆?- SPIKE 闂搁棬 鈫?Task 1銆?- 闄嶇骇璺緞锛堟娴嬪け璐ユ椂鎻愮ず鐢ㄥ畬鏁存爣娉ㄨ鍥撅級鈫?瑕嗙洊鍦?`setupDrawMode` 鐨?try/catch锛圱ask 5锛夛紝澶辫触鍗?Notice 鎻愮ず骞堕€€鍑恒€?
-**Type 涓€鑷存€ф牳鏌ワ細**
-- `LogicalPageLayout`/`LogicalPage`/`ScreenRect` 鍦?Task 2 瀹氫箟锛孴ask 3/5/6 涓€鑷村紩鐢ㄣ€?- `convertStrokesToScreen/ToLogical` 绛惧悕 Task 3 瀹氫箟锛孴ask 5 璋冪敤涓€鑷淬€?- `NATIVE_PEN_BUTTON_CLS` 鍦?Task 4 瀹氫箟骞跺鍑猴紝Task 5 import 淇鍚庣敱鏈枃浠舵彁渚涖€?- `assignStrokeToPage` Task 3 瀹氫箟锛孴ask 5 浣跨敤銆?- `InkEngine` 鏋勯€犲弬鏁颁笌鐪熷疄绛惧悕涓€鑷达紙`(liveCanvas, committedCanvas, scrollEl, options)`锛宍resize(w,h)`銆乣setDisplayScale(scale)`銆乣loadStrokes/strokes[]`銆乣getStrokes()`銆乣setToolState(patch)`銆乣undo/redo/destroy`锛夈€?
+**Spec 覆盖对照：**
+- 入口/出口（笔按钮、进入/退出、命令）→ Task 4、6。
+- 几何对齐（页元素 rect + 自有 pdfjs 逻辑尺寸 + 坐标换算）→ Task 2、5。
+- 墨迹层（复用 InkEngine、预算、无 desync 于 committed）→ Task 5（InkEngine 构造沿用 renderer 默认：committed 已由 v1.1.15 固定为 `desynchronized:false`，此处无需重复处理；backing 预算由 `resolveInkCanvasBudget` 传入）。
+- 手势锁定（绘画模式锁定缩放/滚动）→ Task 5 Step 2。
+- 工具集（含荧光笔）→ Task 6。
+- 数据互通（同 Store/同坐标）→ Task 3、5。
+- SPIKE 闸门 → Task 1。
+- 降级路径（检测失败时提示用完整标注视图）→ 覆盖在 `setupDrawMode` 的 try/catch（Task 5），失败即 Notice 提示并退出。
+
+**Type 一致性核查：**
+- `LogicalPageLayout`/`LogicalPage`/`ScreenRect` 在 Task 2 定义，Task 3/5/6 一致引用。
+- `convertStrokesToScreen/ToLogical` 签名 Task 3 定义，Task 5 调用一致。
+- `NATIVE_PEN_BUTTON_CLS` 在 Task 4 定义并导出，Task 5 import 修正后由本文件提供。
+- `assignStrokeToPage` Task 3 定义，Task 5 使用。
+- `InkEngine` 构造参数与真实签名一致（`(liveCanvas, committedCanvas, scrollEl, options)`，`resize(w,h)`、`setDisplayScale(scale)`、`loadStrokes/strokes[]`、`getStrokes()`、`setToolState(patch)`、`undo/redo/destroy`）。
