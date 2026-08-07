@@ -35,6 +35,14 @@ export class NativePdfOverlayManager {
   private toolbar: HTMLElement | null = null;
   private toolbarButtons: Record<string, HTMLElement> = {};
   private colorDot: HTMLElement | null = null;
+  private viewer: { currentScale: number; container: HTMLElement } | null = null;
+  private pinchTouches = new Map<number, { x: number; y: number }>();
+  private pinchActive = false;
+  private pinchStartDist = 1;
+  private pinchStartScale = 1;
+  private pinchLastMid = { x: 0, y: 0 };
+  private zoomFrame: number | null = null;
+  private relayoutTimer: number | null = null;
 
   constructor(
     private readonly app: App,
@@ -160,19 +168,69 @@ export class NativePdfOverlayManager {
       this.createPageEngine(containerEl, page, rect);
     }
 
-    const blockGesture = (event: Event): void => {
-      event.preventDefault();
-      event.stopPropagation();
+    this.viewer = this.resolveViewer(leaf, containerEl);
+    const overlayEl = this.overlay!;
+    const onTouchStart = (event: TouchEvent): void => {
+      let added = false;
+      for (const t of Array.from(event.changedTouches)) {
+        const onToolbar = t.target instanceof Element && t.target.closest(".mobile-ink-native-toolbar") !== null;
+        if (!onToolbar || this.pinchTouches.size >= 2) {
+          this.pinchTouches.set(t.identifier, { x: t.clientX, y: t.clientY });
+          added = true;
+        }
+      }
+      if (added && this.pinchTouches.size >= 2) {
+        event.preventDefault();
+        event.stopPropagation();
+        this.beginPinch();
+      }
     };
     const onTouchMove = (event: TouchEvent): void => {
-      if (event.touches.length >= 2) blockGesture(event);
+      if (!this.pinchActive) return;
+      for (const t of Array.from(event.changedTouches)) {
+        if (this.pinchTouches.has(t.identifier)) {
+          this.pinchTouches.set(t.identifier, { x: t.clientX, y: t.clientY });
+        }
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      this.handlePinchMove();
     };
-    const onWheel = (event: WheelEvent): void => blockGesture(event);
-    this.captureLayer!.addEventListener("touchmove", onTouchMove, { passive: false });
-    this.captureLayer!.addEventListener("wheel", onWheel, { passive: false });
+    const onTouchEnd = (event: TouchEvent): void => {
+      for (const t of Array.from(event.changedTouches)) {
+        this.pinchTouches.delete(t.identifier);
+      }
+      if (this.pinchActive && this.pinchTouches.size < 2) {
+        event.preventDefault();
+        event.stopPropagation();
+        this.endPinch();
+      }
+    };
+    const onWheel = (event: WheelEvent): void => {
+      const viewer = this.viewer;
+      if (!viewer) return;
+      event.preventDefault();
+      viewer.container.scrollBy(0, event.deltaY);
+      this.scheduleRelayout();
+    };
+    window.addEventListener("touchstart", onTouchStart, { passive: false, capture: true });
+    window.addEventListener("touchmove", onTouchMove, { passive: false, capture: true });
+    window.addEventListener("touchend", onTouchEnd, { passive: false, capture: true });
+    window.addEventListener("touchcancel", onTouchEnd, { passive: false, capture: true });
+    overlayEl.addEventListener("wheel", onWheel, { passive: false });
     this._gestureCleanup = () => {
-      this.captureLayer?.removeEventListener("touchmove", onTouchMove);
-      this.captureLayer?.removeEventListener("wheel", onWheel);
+      window.removeEventListener("touchstart", onTouchStart, true);
+      window.removeEventListener("touchmove", onTouchMove, true);
+      window.removeEventListener("touchend", onTouchEnd, true);
+      window.removeEventListener("touchcancel", onTouchEnd, true);
+      overlayEl.removeEventListener("wheel", onWheel);
+      if (this.zoomFrame !== null) window.cancelAnimationFrame(this.zoomFrame);
+      if (this.relayoutTimer !== null) window.clearTimeout(this.relayoutTimer);
+      this.zoomFrame = null;
+      this.relayoutTimer = null;
+      this.pinchActive = false;
+      this.pinchTouches.clear();
+      this.viewer = null;
     };
 
     this.markDirty();
@@ -334,6 +392,92 @@ export class NativePdfOverlayManager {
     this.pageStrokes.set(pageNumber, logical);
   }
 
+  private resolveViewer(leaf: WorkspaceLeaf, containerEl: HTMLElement): { currentScale: number; container: HTMLElement } | null {
+    const v = (leaf.view as unknown as { viewer?: { currentScale?: number; container?: unknown } }).viewer;
+    if (v && typeof v.currentScale === "number" && v.container instanceof HTMLElement) {
+      return { currentScale: v.currentScale, container: v.container };
+    }
+    const fallback = containerEl.querySelector<HTMLElement>(".pdf-container");
+    if (fallback) {
+      console.warn("Mobile Ink Annotation: pdf.js viewer unavailable; pinch zoom disabled, two-finger pan only");
+      return { currentScale: 1, container: fallback };
+    }
+    return null;
+  }
+
+  private beginPinch(): void {
+    if (this.pinchActive) return;
+    const pts = Array.from(this.pinchTouches.values());
+    if (pts.length < 2) return;
+    this.pinchActive = true;
+    for (const entry of this.engines) entry.engine.setInputEnabled(false);
+    this.pinchStartDist = Math.max(1, Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y));
+    this.pinchStartScale = this.viewer?.currentScale ?? 1;
+    this.pinchLastMid = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+    this.overlay?.classList.add("mobile-ink-native-panning");
+  }
+
+  private handlePinchMove(): void {
+    const viewer = this.viewer;
+    if (!viewer) return;
+    const pts = Array.from(this.pinchTouches.values());
+    if (pts.length < 2) return;
+    const mid = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+    viewer.container.scrollBy(-(mid.x - this.pinchLastMid.x), -(mid.y - this.pinchLastMid.y));
+    this.pinchLastMid = mid;
+    const dist = Math.max(1, Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y));
+    const scale = Math.min(8, Math.max(0.5, this.pinchStartScale * (dist / this.pinchStartDist)));
+    if (this.zoomFrame !== null) return;
+    this.zoomFrame = window.requestAnimationFrame(() => {
+      this.zoomFrame = null;
+      if (!this.pinchActive || !viewer) return;
+      if (Math.abs(viewer.currentScale - scale) > 0.001) {
+        viewer.currentScale = scale;
+      }
+    });
+  }
+
+  private endPinch(): void {
+    this.pinchActive = false;
+    // 双 rAF：给 pdf.js 当前帧 + 下一帧完成缩放后的页面布局，再读最新 .page 矩形重建；
+    // 期间保留 .panning 隐藏画布，重建完成后统一移除。
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+      try {
+        this.relayout();
+      } finally {
+        this.overlay?.classList.remove("mobile-ink-native-panning");
+      }
+    }));
+  }
+
+  private scheduleRelayout(): void {
+    if (this.relayoutTimer !== null) window.clearTimeout(this.relayoutTimer);
+    this.relayoutTimer = window.setTimeout(() => {
+      this.relayoutTimer = null;
+      this.relayout();
+    }, 120);
+  }
+
+  private relayout(): void {
+    const leaf = this.drawModeLeaf;
+    const containerEl = leaf?.view.containerEl;
+    if (!leaf || !containerEl || !this.layout || !this.overlay) return;
+    for (const entry of this.engines) entry.engine.replaceStrokes(entry.engine.getStrokes(), false);
+    for (const entry of this.engines) this.replacePageStrokes(entry.page.pageNumber);
+    for (const entry of this.engines) {
+      entry.engine.destroy();
+      entry.live.remove();
+      entry.committed.remove();
+    }
+    this.engines = [];
+    const pages = this.getVisiblePages(containerEl);
+    for (const { pageNumber, rect } of pages) {
+      const page = this.layout.pages[pageNumber - 1];
+      if (!page) continue;
+      this.createPageEngine(containerEl, page, rect);
+    }
+  }
+
   private markDirty(): void {
     this.dirty = true;
     if (this.saveTimer !== null) window.clearTimeout(this.saveTimer);
@@ -387,5 +531,6 @@ export class NativePdfOverlayManager {
     this.toolbar = null;
     this.toolbarButtons = {};
     this.colorDot = null;
+    this.viewer = null;
   }
 }
