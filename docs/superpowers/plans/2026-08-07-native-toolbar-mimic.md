@@ -162,16 +162,9 @@
 
 #### 步骤 5: 修改 `styles.css` — 改写笔按钮与工具栏，删除旧 tool 规则
 
-**5a.** 将当前 `.mobile-ink-native-pen-button` 块（行 2472-2491，含 `:hover`）整体替换为：
+**5a.** 将当前 `.mobile-ink-native-pen-button` 块（行 2472-2491，含 `:hover`）整体替换为（定位规则移入文件末尾别名块，避免被 `button.mobile-ink-floating-button{display:none}` 与别名 `position:relative` 的高特异性规则覆盖）：
 
 ```css
-.mobile-ink-native-pen-button {
-  position: fixed;
-  top: max(14px, env(safe-area-inset-top));
-  right: max(14px, env(safe-area-inset-right));
-  display: inline-flex;
-  z-index: 400;
-}
 .mobile-ink-native-pen-button:hover {
   filter: brightness(1.05);
 }
@@ -255,13 +248,22 @@ button.mobile-ink-native-pen-button {
   appearance: none;
   -webkit-appearance: none;
   border-radius: 999px;
-  position: relative;
   box-sizing: border-box;
   min-width: 0;
   min-height: 0;
   border: 0;
   padding: 0;
   --mobile-ink-icon-foreground: var(--mobile-ink-tool-color, var(--interactive-accent));
+}
+
+/* 笔按钮定位：与 button.mobile-ink-floating-button 同特异性 (0,1,1) 且位于文件末尾，
+   故 display/position/top/right/z-index 必须写在此处（基础规则 (0,1,0) 会被盖掉） */
+button.mobile-ink-native-pen-button {
+  position: fixed;
+  display: inline-flex;
+  top: max(14px, env(safe-area-inset-top));
+  right: max(14px, env(safe-area-inset-right));
+  z-index: 400;
 }
 ```
 
@@ -286,9 +288,9 @@ Expected: 两者均输出 `OK` / `all ... assertions passed`，exit 0。
 
 Run:
 ```bash
-node -e "const s=require('fs').readFileSync('styles.css','utf8');const re=/(\.mobile-ink-native-tool-active|\.mobile-ink-native-tool\s*\{)/g;console.log('old native-tool rules:', (s.match(re)||[]).length);console.log('pen-button present:', (s.match(/button\.mobile-ink-native-pen-button/g)||[]).length);console.log('toolbar bottom:', /\.mobile-ink-native-toolbar\s*\{\s*position: absolute;\s*left: 50%;/.test(s))"
+node -e "const s=require('fs').readFileSync('styles.css','utf8');const re=/(\.mobile-ink-native-tool-active|\.mobile-ink-native-tool\s*\{)/g;console.log('old native-tool rules:', (s.match(re)||[]).length);console.log('pen fixed:', /button\.mobile-ink-native-pen-button\s*\{\s*position: fixed;\s*display: inline-flex;/.test(s));console.log('toolbar bottom:', /\.mobile-ink-native-toolbar\s*\{\s*position: absolute;\s*left: 50%;/.test(s))"
 ```
-Expected: `old native-tool rules: 0`（旧 `.mobile-ink-native-tool {` 与 `.mobile-ink-native-tool-active {` 已删），`pen-button present: 2`（本体 + 别名），`toolbar bottom: true`。
+Expected: `old native-tool rules: 0`（旧 `.mobile-ink-native-tool {` 与 `.mobile-ink-native-tool-active {` 已删），`pen fixed: true`，`toolbar bottom: true`。
 
 #### 步骤 9: 提交
 

@@ -159,7 +159,6 @@ button.mobile-ink-native-pen-button {
   appearance: none;
   -webkit-appearance: none;
   border-radius: 999px;
-  position: relative;
   box-sizing: border-box;
   min-width: 0;
   min-height: 0;
@@ -167,9 +166,19 @@ button.mobile-ink-native-pen-button {
   padding: 0;
   --mobile-ink-icon-foreground: var(--mobile-ink-tool-color, var(--interactive-accent));
 }
+
+/* 笔按钮定位：与 button.mobile-ink-floating-button 同特异性 (0,1,1) 且位于文件末尾，
+   故 display/position/top/right/z-index 必须写在此处（基础规则 (0,1,0) 会被盖掉） */
+button.mobile-ink-native-pen-button {
+  position: fixed;
+  display: inline-flex;
+  top: max(14px, env(safe-area-inset-top));
+  right: max(14px, env(safe-area-inset-right));
+  z-index: 400;
+}
 ```
 
-别名规则追加在 styles.css 末尾（当前 native 块之后），确保与 `.mobile-ink-floating-button` 本体规则（styles.css:519）同级时后者序在前的语义正确：`button.mobile-ink-native-pen-button` 与 `button.mobile-ink-floating-button` 特异性相同，靠后覆盖 `display:none`、获得笔色前景。
+别名规则追加在 styles.css 末尾（当前 native 块之后），确保与 `.mobile-ink-floating-button` 本体规则（styles.css:519）同级时后者序在前的语义正确：`button.mobile-ink-native-pen-button` 与 `button.mobile-ink-floating-button` 特异性相同，靠后的定位规则覆盖 `display:none`、获得笔色前景。注意：基础规则 `.mobile-ink-native-pen-button`（(0,1,0)）里的 `display`/`position` 会被任何 (0,1,1) 规则覆盖，因此定位必须放在文件末尾的 `button.mobile-ink-native-pen-button` 专用规则里。
 
 ### 4. 工具色辅助
 
