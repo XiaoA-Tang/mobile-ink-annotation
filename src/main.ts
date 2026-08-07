@@ -3,6 +3,7 @@ import { StrokeStore } from "./ink/StrokeStore";
 import { AnnotationView } from "./views/AnnotationView";
 import { VIEW_TYPE_MOBILE_INK } from "./constants";
 import { probeNativePdfStructure } from "./pdf/nativePdfProbe";
+import { NativePdfOverlayManager } from "./pdf/NativePdfOverlayManager";
 
 export type SavedFilePosition =
   | { kind: "pdf"; page: number }
@@ -22,10 +23,14 @@ export default class MobileInkAnnotationPlugin extends Plugin {
   store!: StrokeStore;
   settings!: MobileInkAnnotationSettings;
   private defaultPdfOpenPath: string | null = null;
+  private nativePdfOverlay!: NativePdfOverlayManager;
 
   async onload(): Promise<void> {
     await this.loadSettings();
     this.store = new StrokeStore(this.app, this);
+
+    this.nativePdfOverlay = new NativePdfOverlayManager(this.app, this.store);
+    this.nativePdfOverlay.onload();
 
     this.registerView(
       VIEW_TYPE_MOBILE_INK,
@@ -92,6 +97,7 @@ export default class MobileInkAnnotationPlugin extends Plugin {
   }
 
   onunload(): void {
+    this.nativePdfOverlay?.onunload();
     this.app.workspace.detachLeavesOfType(VIEW_TYPE_MOBILE_INK);
   }
 

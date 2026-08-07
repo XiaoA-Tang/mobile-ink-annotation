@@ -2468,3 +2468,24 @@ input.mobile-ink-pdf-page-input {
   width: 100%;
   max-width: 56px;
 }
+
+.mobile-ink-native-pen-button {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  z-index: 400;
+  border: none;
+  cursor: pointer;
+}
+.mobile-ink-native-pen-button:hover {
+  filter: brightness(1.1);
+}
