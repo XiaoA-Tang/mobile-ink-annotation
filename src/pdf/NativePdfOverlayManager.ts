@@ -34,6 +34,7 @@ export class NativePdfOverlayManager {
   private _gestureCleanup: (() => void) | null = null;
   private toolbar: HTMLElement | null = null;
   private toolbarButtons: Record<string, HTMLElement> = {};
+  private colorDot: HTMLElement | null = null;
 
   constructor(
     private readonly app: App,
@@ -79,9 +80,10 @@ export class NativePdfOverlayManager {
 
   private attachPenButton(leaf: WorkspaceLeaf): void {
     const button = leaf.view.containerEl.createEl("button", {
-      cls: NATIVE_PEN_BUTTON_CLS,
+      cls: `${NATIVE_PEN_BUTTON_CLS} mobile-ink-floating-button`,
       attr: { "aria-label": "就地手写批注" }
     });
+    button.style.setProperty("--mobile-ink-tool-color", this.currentInkColor());
     setIcon(button, "pencil");
     button.addEventListener("click", () => void this.enterDrawMode(leaf));
     this.penButton = button;
@@ -174,32 +176,73 @@ export class NativePdfOverlayManager {
   private buildToolbar(containerEl: HTMLElement): void {
     const bar = containerEl.createDiv({ cls: "mobile-ink-native-toolbar" });
     this.toolbar = bar;
-    const tools: Array<{ key: string; icon: string; label: string; action: () => void }> = [
-      { key: "pen", icon: "pen-tool", label: "笔", action: () => this.applyToolState({ tool: "pen" }) },
-      { key: "highlighter", icon: "highlighter", label: "荧光笔", action: () => this.applyToolState({ tool: "highlighter" }) },
-      { key: "eraser", icon: "eraser", label: "橡皮", action: () => this.applyToolState({ tool: "eraser" }) },
-      { key: "undo", icon: "undo-2", label: "撤销", action: () => { for (const e of this.engines) e.engine.undo(); this.refreshToolbar(); } },
-      { key: "redo", icon: "redo-2", label: "重做", action: () => { for (const e of this.engines) e.engine.redo(); this.refreshToolbar(); } },
-      { key: "color", icon: "palette", label: "颜色", action: () => this.cycleColor() },
-      { key: "width", icon: "sliders-horizontal", label: "线宽", action: () => this.cycleWidth() },
-      { key: "save", icon: "checkmark", label: "保存", action: () => void this.flushSave() },
-      { key: "exit", icon: "x", label: "退出", action: () => void this.exitDrawMode() }
-    ];
-    for (const t of tools) {
-      const btn = bar.createEl("button", { cls: "mobile-ink-native-tool", attr: { "aria-label": t.label } });
-      setIcon(btn, t.icon);
-      btn.addEventListener("click", t.action);
-      this.toolbarButtons[t.key] = btn;
-    }
+    const dock = bar.createDiv({ cls: "mobile-ink-toolbar-dock" });
+
+    const addToolButton = (key: string, icon: string, label: string, action: () => void, group: HTMLElement): void => {
+      const btn = group.createEl("button", {
+        cls: "mobile-ink-icon-button mobile-ink-tool-button",
+        attr: { "aria-label": label, title: label }
+      });
+      setIcon(btn, icon);
+      btn.addEventListener("click", action);
+      this.toolbarButtons[key] = btn;
+    };
+    const addIconButton = (key: string, icon: string, label: string, action: () => void, group: HTMLElement): void => {
+      const btn = group.createEl("button", {
+        cls: "mobile-ink-icon-button",
+        attr: { "aria-label": label, title: label }
+      });
+      setIcon(btn, icon);
+      btn.addEventListener("click", action);
+      this.toolbarButtons[key] = btn;
+    };
+
+    const toolGroup = dock.createDiv({ cls: "mobile-ink-toolbar-group" });
+    addToolButton("pen", "pencil", "画笔", () => this.applyToolState({ tool: "pen" }), toolGroup);
+    addToolButton("highlighter", "highlighter", "记号笔", () => this.applyToolState({ tool: "highlighter" }), toolGroup);
+    addToolButton("eraser", "eraser", "橡皮擦", () => this.applyToolState({ tool: "eraser" }), toolGroup);
+
+    const styleGroup = dock.createDiv({ cls: "mobile-ink-toolbar-group" });
+    const colorBtn = styleGroup.createEl("button", {
+      cls: "mobile-ink-current-color-button",
+      attr: { "aria-label": "颜色", title: "颜色" }
+    });
+    const colorDot = colorBtn.createDiv({ cls: "mobile-ink-current-color-dot" });
+    colorBtn.addEventListener("click", () => this.cycleColor());
+    this.toolbarButtons.color = colorBtn;
+    this.colorDot = colorDot;
+    addIconButton("width", "sliders-horizontal", "线条粗细", () => this.cycleWidth(), styleGroup);
+
+    const historyGroup = dock.createDiv({ cls: "mobile-ink-toolbar-group" });
+    addIconButton("undo", "undo-2", "撤销", () => {
+      for (const e of this.engines) e.engine.undo();
+      this.refreshToolbar();
+    }, historyGroup);
+    addIconButton("redo", "redo-2", "重做", () => {
+      for (const e of this.engines) e.engine.redo();
+      this.refreshToolbar();
+    }, historyGroup);
+
+    const actionGroup = dock.createDiv({ cls: "mobile-ink-toolbar-group" });
+    addIconButton("save", "checkmark", "保存", () => void this.flushSave(), actionGroup);
+    addIconButton("exit", "x", "退出", () => void this.exitDrawMode(), actionGroup);
+
     this.refreshToolbar();
+  }
+
+  private currentInkColor(): string {
+    return this.toolState.tool === "highlighter" ? this.toolState.highlighterColor : this.toolState.color;
   }
 
   private refreshToolbar(): void {
     if (!this.toolbar) return;
-    const t = this.toolState;
+    this.toolbar.style.setProperty("--mobile-ink-tool-color", this.currentInkColor());
     for (const key of ["pen", "highlighter", "eraser"]) {
       const el = this.toolbarButtons[key];
-      if (el) el.classList.toggle("mobile-ink-native-tool-active", t.tool === key);
+      if (el) el.classList.toggle("mobile-ink-active", this.toolState.tool === key);
+    }
+    if (this.colorDot) {
+      this.colorDot.style.background = this.currentInkColor();
     }
   }
 
