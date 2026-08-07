@@ -45,7 +45,6 @@ export class NativePdfOverlayManager {
 
   private followFrame: number | null = null;
   private sizeChangedAt: number | null = null;
-  private rectCache = new Map<HTMLElement, ScreenRect>();
   private teardownToken = 0;
   private retryBlockedUntil = 0;
   private unloaded = false;
@@ -204,13 +203,13 @@ export class NativePdfOverlayManager {
 
     for (const entry of Array.from(this.engines)) {
       const stillVisible = pages.some((p) => p.el === entry.pageEl);
-      if (stillVisible) continue;
+      const connected = entry.pageEl.isConnected && entry.live.isConnected;
+      if (stillVisible && connected) continue;
       entry.engine.setInputEnabled(false);
       this.replacePageStrokes(entry.page.pageNumber);
       entry.engine.destroy();
       entry.live.remove();
       entry.committed.remove();
-      this.rectCache.delete(entry.pageEl);
       this.engines.splice(this.engines.indexOf(entry), 1);
     }
 
@@ -221,34 +220,17 @@ export class NativePdfOverlayManager {
       this.createPageEngine(containerEl, p.el, page, p.rect);
     }
 
+    let sizeChanged = false;
     for (const p of pages) {
       const entry = this.engines.find((e) => e.pageEl === p.el);
       if (!entry) continue;
       const r = p.rect;
-      const prev = this.rectCache.get(p.el);
-      const sizeChanged = !prev || Math.abs(prev.width - r.width) > 0.5 || Math.abs(prev.height - r.height) > 0.5;
-      if (sizeChanged) this.sizeChangedAt = performance.now();
-      this.rectCache.set(p.el, r);
-      const moved = Math.abs(entry.rect.left - r.left) > 0.5
-        || Math.abs(entry.rect.top - r.top) > 0.5
-        || Math.abs(entry.rect.width - r.width) > 0.5
-        || Math.abs(entry.rect.height - r.height) > 0.5;
-      if (moved) {
-        entry.rect = r;
-        for (const c of [entry.live, entry.committed]) {
-          c.style.left = `${r.left}px`;
-          c.style.top = `${r.top}px`;
-          c.style.width = `${r.width}px`;
-          c.style.height = `${r.height}px`;
-        }
+      if (Math.abs(entry.rect.width - r.width) > 0.5 || Math.abs(entry.rect.height - r.height) > 0.5) {
+        sizeChanged = true;
       }
-      const hidden = p.el.style.visibility === "hidden" || p.el.offsetParent === null;
-      const vis = hidden ? "hidden" : "";
-      if (entry.live.style.visibility !== vis) {
-        entry.live.style.visibility = vis;
-        entry.committed.style.visibility = vis;
-      }
+      entry.rect = r;
     }
+    if (sizeChanged) this.sizeChangedAt = performance.now();
 
     if (this.sizeChangedAt !== null && performance.now() - this.sizeChangedAt > SETTLE_MS) {
       this.sizeChangedAt = null;
@@ -276,19 +258,20 @@ export class NativePdfOverlayManager {
     const width = Math.max(1, Math.ceil(rect.width));
     const height = Math.max(1, Math.ceil(rect.height));
 
+    if (getComputedStyle(pageEl).position === "static") pageEl.style.position = "relative";
+
     const live = document.createElement("canvas");
     live.className = NATIVE_OVERLAY_PAGE_CANVAS_CLS;
     const committed = document.createElement("canvas");
     committed.className = NATIVE_OVERLAY_PAGE_CANVAS_CLS;
     for (const c of [live, committed]) {
       c.style.position = "absolute";
-      c.style.left = `${rect.left}px`;
-      c.style.top = `${rect.top}px`;
-      c.style.width = `${width}px`;
-      c.style.height = `${height}px`;
+      c.style.top = "0";
+      c.style.left = "0";
       c.style.touchAction = "none";
+      c.style.zIndex = "3";
     }
-    this.overlay!.append(live, committed);
+    pageEl.append(live, committed);
 
     const engine = new InkEngine(live, committed, containerEl, {
       initialToolState: { ...this.toolState },
@@ -300,12 +283,15 @@ export class NativePdfOverlayManager {
     });
     engine.resize(width, height);
     engine.setDisplayScale(1);
+    for (const c of [live, committed]) {
+      c.style.width = "100%";
+      c.style.height = "100%";
+    }
 
     const logicalStrokes = this.pageStrokes.get(page.pageNumber) ?? [];
     engine.loadStrokes(convertStrokesToScreen(logicalStrokes, page, rect));
 
     this.engines.push({ engine, page, rect, live, committed, pageEl });
-    this.rectCache.set(pageEl, { ...rect });
   }
 
   private replacePageStrokes(pageNumber: number): void {
@@ -324,7 +310,6 @@ export class NativePdfOverlayManager {
       entry.committed.remove();
     }
     this.engines = [];
-    this.rectCache.clear();
     const pages = this.getVisiblePages(containerEl);
     for (const { el, pageNumber, rect } of pages) {
       const page = this.layout?.pages[pageNumber - 1];
@@ -382,9 +367,6 @@ export class NativePdfOverlayManager {
       for (const e of this.engines) e.engine.redo();
       this.refreshToolbar();
     }, historyGroup);
-
-    const actionGroup = dock.createDiv({ cls: "mobile-ink-toolbar-group" });
-    addIconButton("save", "checkmark", "保存", () => void this.flushSave(), actionGroup);
 
     this.refreshToolbar();
   }
@@ -471,7 +453,6 @@ export class NativePdfOverlayManager {
     if (this.saveTimer !== null) { window.clearTimeout(this.saveTimer); this.saveTimer = null; }
     if (this.followFrame !== null) { window.cancelAnimationFrame(this.followFrame); this.followFrame = null; }
     this.sizeChangedAt = null;
-    this.rectCache.clear();
     for (const entry of this.engines) {
       entry.engine.setInputEnabled(false);
       entry.engine.destroy();
