@@ -2469,13 +2469,6 @@ input.mobile-ink-pdf-page-input {
   max-width: 56px;
 }
 
-.mobile-ink-native-pen-button {
-  position: fixed;
-  top: max(14px, env(safe-area-inset-top));
-  right: max(14px, env(safe-area-inset-right));
-  display: inline-flex;
-  z-index: 400;
-}
 .mobile-ink-native-pen-button:hover {
   filter: brightness(1.05);
 }
@@ -2568,11 +2561,20 @@ button.mobile-ink-native-pen-button {
   appearance: none;
   -webkit-appearance: none;
   border-radius: 999px;
-  position: relative;
   box-sizing: border-box;
   min-width: 0;
   min-height: 0;
   border: 0;
   padding: 0;
   --mobile-ink-icon-foreground: var(--mobile-ink-tool-color, var(--interactive-accent));
+}
+
+/* 笔按钮定位：与 button.mobile-ink-floating-button 同特异性 (0,1,1) 且位于文件末尾，
+   故 display/position/top/right/z-index 必须写在此处（基础规则 (0,1,0) 会被盖掉） */
+button.mobile-ink-native-pen-button {
+  position: fixed;
+  display: inline-flex;
+  top: max(14px, env(safe-area-inset-top));
+  right: max(14px, env(safe-area-inset-right));
+  z-index: 400;
 }
