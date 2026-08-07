@@ -2474,17 +2474,11 @@ input.mobile-ink-pdf-page-input {
   inset: 0;
   z-index: 350;
   overflow: hidden;
-}
-
-.mobile-ink-native-capture {
-  position: absolute;
-  inset: 0;
-  background: transparent;
-  touch-action: none;
+  pointer-events: none;
 }
 
 .mobile-ink-native-page-canvas {
-  pointer-events: auto;
+  pointer-events: none;
 }
 
 .mobile-ink-native-toolbar {
@@ -2545,9 +2539,4 @@ input.mobile-ink-pdf-page-input {
   stroke-width: 2.05;
   opacity: 1;
   visibility: visible;
-}
-
-/* 缩放/平移进行中隐藏画布，避免旧矩形下笔迹错位闪烁（relayout 后恢复） */
-.mobile-ink-native-overlay.mobile-ink-native-panning .mobile-ink-native-page-canvas {
-  visibility: hidden;
 }
