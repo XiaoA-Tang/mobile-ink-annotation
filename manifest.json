@@ -1,7 +1,7 @@
 ﻿{
   "id": "mobile-ink-annotation-basic",
   "name": "Mobile Ink Annotation",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "minAppVersion": "1.5.0",
   "description": "Markdown/PDF handwritten annotation with pen, highlighter, eraser, color, width, undo, redo, save, and exit tools, plus PDF text selection annotation (highlight, underline, strikethrough, and notes).",
   "author": "peyote",
