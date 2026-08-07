@@ -1020,7 +1020,10 @@ export class InkEngine {
     const target = event.target;
     if (!(target instanceof Element)) return false;
 
-    if (target.closest(".mobile-ink-toolbar, .mobile-ink-pdf-page-nav, .mobile-ink-native-toolbar")) return true;
+    if (target.closest(
+      ".mobile-ink-toolbar, .mobile-ink-pdf-page-nav, .mobile-ink-native-toolbar, " +
+      ".mobile-ink-pdf-toolbar-pen, .pdf-toolbar"
+    )) return true;
 
     if (target.closest(".mobile-ink-object-control, .mobile-ink-object-resize-handle, .mobile-ink-object-delete")) {
       return true;
