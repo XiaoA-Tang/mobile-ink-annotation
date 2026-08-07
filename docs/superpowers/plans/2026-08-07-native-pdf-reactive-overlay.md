@@ -204,7 +204,7 @@ export class NativePdfOverlayManager {
         this.createPageEngine(containerEl, el, page, rect);
       }
 
-      this.followFrame = window.requestAnimationFrame(this.followFrame);
+      this.followFrame = window.requestAnimationFrame(this.followTick);
       this.retryBlockedUntil = 0;
     } catch (error) {
       console.error("Mobile Ink Annotation: failed to activate overlay", error);
@@ -218,7 +218,7 @@ export class NativePdfOverlayManager {
     }
   }
 
-  private followFrame = (): void => {
+  private followTick = (): void => {
     this.followFrame = null;
     if (!this.isActive) return;
     const containerEl = this.activeLeaf?.view.containerEl;
@@ -229,7 +229,7 @@ export class NativePdfOverlayManager {
       console.error("Mobile Ink Annotation: overlay tracking error", error);
     }
     if (this.isActive) {
-      this.followFrame = window.requestAnimationFrame(this.followFrame);
+      this.followFrame = window.requestAnimationFrame(this.followTick);
     }
   };
 
