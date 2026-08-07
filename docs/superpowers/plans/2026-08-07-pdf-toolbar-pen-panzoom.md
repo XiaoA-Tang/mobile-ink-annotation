@@ -24,6 +24,7 @@
 - 删除 styles.css 中全部 `.mobile-ink-native-pen-button` 规则（4 处）；`mobile-ink-floating-button` 相关只删 native 块里的引用，不动 `.mobile-ink-root` 作用域的原版规则与 `AnnotationView.ts` 的使用。
 - 每步验证：`npm run build`（exit 0）→ `node --experimental-strip-types scripts/test-canvas-budget.mjs`（24 断言 OK）→ `node --experimental-strip-types scripts/test-native-pdf-geometry.mjs`（22 断言 OK）→ 静态 grep 检查 → 提交。
 - 提交信息用中文、遵循仓库风格（`feat:`/`fix:` 前缀）。
+- 终审修复（评审强制，已并入上述步骤）：`relayout()` 先对每引擎 `setInputEnabled(false)`（内部 `finishInterruptedInput`+`flushPendingCommits` 先提交活动笔划，避免滚轮路径丢笔划）；`endPinchRaf` 存储并在 `_gestureCleanup` 取消；工具栏触点一律不入 `pinchTouches`；`viewerWarned` 使降级 warn 每绘制会话仅一次。
 
 ---
 
@@ -179,6 +180,8 @@ git commit -m "feat: move native PDF pen entry to top toolbar (.pdf-toolbar), dr
   private pinchLastMid = { x: 0, y: 0 };
   private zoomFrame: number | null = null;
   private relayoutTimer: number | null = null;
+  private endPinchRaf: number | null = null;
+  private viewerWarned = false;
 ```
 
 - [ ] **Step 2: 新增 `resolveViewer`、`beginPinch`、`handlePinchMove`、`endPinch`、`scheduleRelayout`、`relayout`**
@@ -193,7 +196,10 @@ git commit -m "feat: move native PDF pen entry to top toolbar (.pdf-toolbar), dr
     }
     const fallback = containerEl.querySelector<HTMLElement>(".pdf-container");
     if (fallback) {
-      console.warn("Mobile Ink Annotation: pdf.js viewer unavailable; pinch zoom disabled, two-finger pan only");
+      if (!this.viewerWarned) {
+        this.viewerWarned = true;
+        console.warn("Mobile Ink Annotation: pdf.js viewer unavailable; pinch zoom disabled, two-finger pan only");
+      }
       return { currentScale: 1, container: fallback };
     }
     return null;
@@ -234,14 +240,17 @@ git commit -m "feat: move native PDF pen entry to top toolbar (.pdf-toolbar), dr
   private endPinch(): void {
     this.pinchActive = false;
     // 双 rAF：给 pdf.js 当前帧 + 下一帧完成缩放后的页面布局，再读最新 .page 矩形重建；
-    // 期间保留 .panning 隐藏画布，重建完成后统一移除。
-    window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
-      try {
-        this.relayout();
-      } finally {
-        this.overlay?.classList.remove("mobile-ink-native-panning");
-      }
-    }));
+    // 期间保留 .panning 隐藏画布，重建完成后统一移除；rAF id 存入 endPinchRaf 供 cleanup 取消。
+    this.endPinchRaf = window.requestAnimationFrame(() => {
+      this.endPinchRaf = window.requestAnimationFrame(() => {
+        this.endPinchRaf = null;
+        try {
+          this.relayout();
+        } finally {
+          this.overlay?.classList.remove("mobile-ink-native-panning");
+        }
+      });
+    });
   }
 
   private scheduleRelayout(): void {
@@ -256,7 +265,11 @@ git commit -m "feat: move native PDF pen entry to top toolbar (.pdf-toolbar), dr
     const leaf = this.drawModeLeaf;
     const containerEl = leaf?.view.containerEl;
     if (!leaf || !containerEl || !this.layout || !this.overlay) return;
-    for (const entry of this.engines) entry.engine.replaceStrokes(entry.engine.getStrokes(), false);
+    // setInputEnabled(false) 触发 InkEngine 内部 finishInterruptedInput + flushPendingCommits，
+    // 先提交任何进行中的笔划到引擎已提交集合，再读 getStrokes——避免滚轮路径丢笔划
+    // （评审修复：原 replaceStrokes(getStrokes(),false) 在提交前克隆旧集合导致活动笔划丢失）。
+    // 重建出的新引擎默认 inputEnabled=true，无需重新启用。
+    for (const entry of this.engines) entry.engine.setInputEnabled(false);
     for (const entry of this.engines) this.replacePageStrokes(entry.page.pageNumber);
     for (const entry of this.engines) {
       entry.engine.destroy();
@@ -281,15 +294,13 @@ git commit -m "feat: move native PDF pen entry to top toolbar (.pdf-toolbar), dr
     this.viewer = this.resolveViewer(leaf, containerEl);
     const overlayEl = this.overlay!;
     const onTouchStart = (event: TouchEvent): void => {
-      let added = false;
       for (const t of Array.from(event.changedTouches)) {
         const onToolbar = t.target instanceof Element && t.target.closest(".mobile-ink-native-toolbar") !== null;
-        if (!onToolbar || this.pinchTouches.size >= 2) {
+        if (!onToolbar) {
           this.pinchTouches.set(t.identifier, { x: t.clientX, y: t.clientY });
-          added = true;
         }
       }
-      if (added && this.pinchTouches.size >= 2) {
+      if (this.pinchTouches.size >= 2) {
         event.preventDefault();
         event.stopPropagation();
         this.beginPinch();
@@ -336,8 +347,10 @@ git commit -m "feat: move native PDF pen entry to top toolbar (.pdf-toolbar), dr
       overlayEl.removeEventListener("wheel", onWheel);
       if (this.zoomFrame !== null) window.cancelAnimationFrame(this.zoomFrame);
       if (this.relayoutTimer !== null) window.clearTimeout(this.relayoutTimer);
+      if (this.endPinchRaf !== null) window.cancelAnimationFrame(this.endPinchRaf);
       this.zoomFrame = null;
       this.relayoutTimer = null;
+      this.endPinchRaf = null;
       this.pinchActive = false;
       this.pinchTouches.clear();
       this.viewer = null;
@@ -346,10 +359,11 @@ git commit -m "feat: move native PDF pen entry to top toolbar (.pdf-toolbar), dr
 
 - [ ] **Step 4: teardown 兜底清理**
 
-在 `src/pdf/NativePdfOverlayManager.ts`（`this.colorDot = null;` 之后、方法结束 `}` 之前）追加一行：
+在 `src/pdf/NativePdfOverlayManager.ts`（`this.colorDot = null;` 之后、方法结束 `}` 之前）追加两行：
 
 ```ts
     this.viewer = null;
+    this.viewerWarned = false;
 ```
 
 （`_gestureCleanup` 已清理手势态与定时器；此处兜底，防 teardown 被直接调用时手势态残留。）
