@@ -1,4 +1,5 @@
 import { computePageSizeFromPdf, buildUniformPageLayout, screenToLogical, logicalToScreen } from "../src/pdf/nativePdfGeometry.ts";
+import { assignStrokeToPage, splitStrokesByPage, convertStrokesToScreen, convertStrokesToLogical } from "../src/pdf/overlayInkData.ts";
 import { PDF_BACKGROUND_PAGE_GAP } from "../src/views/annotationConstants.ts";
 
 let failed = 0;
@@ -45,6 +46,32 @@ assert("roundtrip y", Math.abs(screen.y - 330.5) < 0.001, true);
 // 4. 非零保护：width/height 为 0 时返回原坐标不 NaN
 const zero = screenToLogical(layout.pages[0], { left: 0, top: 0, width: 0, height: 0 }, 5, 5);
 assert("zero rect finite", [zero.x, zero.y].every(Number.isFinite), true);
+
+// 5. overlay ink data layer: assign / split / screen-logical conversion
+const layout2 = buildUniformPageLayout(960, 1242, 2);
+const mk = (id, y) => ({ id, tool: "pen", color: "#111111", width: 2, points: [{ x: 100, y, t: 0, pressure: 0.5 }] });
+const strokeP1 = mk("s1", 500);
+const strokeP2 = mk("s2", 1242 + PDF_BACKGROUND_PAGE_GAP + 100);
+assert("assign page1", assignStrokeToPage(strokeP1, layout2)?.pageNumber, 1);
+assert("assign page2", assignStrokeToPage(strokeP2, layout2)?.pageNumber, 2);
+
+const byPage = splitStrokesByPage([strokeP1, strokeP2], layout2);
+assert("split count", byPage.size, 2);
+assert("page1 strokes", byPage.get(1)?.length, 1);
+assert("page2 strokes", byPage.get(2)?.length, 1);
+
+const rect2 = { left: 0, top: 0, width: 480, height: 621 };
+const screenStrokes = convertStrokesToScreen([strokeP1], layout2.pages[0], rect2);
+const screenX = (screenStrokes[0].points[0].x);
+const screenY = (screenStrokes[0].points[0].y);
+assert("toScreen x scale", Math.round(screenX * 100) / 100, 50);
+assert("toScreen y scale", Math.round(screenY * 100) / 100, 250);
+assert("toScreen width scale", Math.round(screenStrokes[0].width * 100) / 100, 1);
+
+const back = convertStrokesToLogical(screenStrokes, layout2.pages[0], rect2);
+assert("toLogical x", Math.round(back[0].points[0].x), 100);
+assert("toLogical y", Math.round(back[0].points[0].y), 500);
+assert("toLogical width", Math.round(back[0].width), 2);
 
 if (failed > 0) {
   console.error(`FAILED: ${failed} assertion(s)`);
