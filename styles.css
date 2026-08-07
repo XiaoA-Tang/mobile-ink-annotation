@@ -2469,10 +2469,6 @@ input.mobile-ink-pdf-page-input {
   max-width: 56px;
 }
 
-.mobile-ink-native-pen-button:hover {
-  filter: brightness(1.05);
-}
-
 .mobile-ink-native-overlay {
   position: fixed;
   inset: 0;
@@ -2536,11 +2532,7 @@ input.mobile-ink-pdf-page-input {
 }
 
 .mobile-ink-native-overlay button.mobile-ink-icon-button svg,
-.mobile-ink-native-overlay button.mobile-ink-icon-button .svg-icon,
-.mobile-ink-native-overlay button.mobile-ink-floating-button svg,
-.mobile-ink-native-overlay button.mobile-ink-floating-button .svg-icon,
-button.mobile-ink-native-pen-button svg,
-button.mobile-ink-native-pen-button .svg-icon {
+.mobile-ink-native-overlay button.mobile-ink-icon-button .svg-icon {
   display: block;
   flex: 0 0 auto;
   width: 18px;
@@ -2553,28 +2545,4 @@ button.mobile-ink-native-pen-button .svg-icon {
   stroke-width: 2.05;
   opacity: 1;
   visibility: visible;
-}
-
-/* 悬浮按钮/笔按钮：仅 pin 盒几何与圆角，外观继承原版 floating-button 本体（玻璃+笔色），并恢复笔色图标前景 */
-.mobile-ink-native-overlay button.mobile-ink-floating-button,
-button.mobile-ink-native-pen-button {
-  appearance: none;
-  -webkit-appearance: none;
-  border-radius: 999px;
-  box-sizing: border-box;
-  min-width: 0;
-  min-height: 0;
-  border: 0;
-  padding: 0;
-  --mobile-ink-icon-foreground: var(--mobile-ink-tool-color, var(--interactive-accent));
-}
-
-/* 笔按钮定位：与 button.mobile-ink-floating-button 同特异性 (0,1,1) 且位于文件末尾，
-   故 display/position/top/right/z-index 必须写在此处（基础规则 (0,1,0) 会被盖掉） */
-button.mobile-ink-native-pen-button {
-  position: fixed;
-  display: inline-flex;
-  top: max(14px, env(safe-area-inset-top));
-  right: max(14px, env(safe-area-inset-right));
-  z-index: 400;
 }

@@ -7,7 +7,7 @@ import { PdfJsDocument, PdfJsLib } from "../views/annotationTypes";
 import { buildUniformPageLayout, computePageSizeFromPdf, LogicalPage, LogicalPageLayout, ScreenRect } from "./nativePdfGeometry";
 import { assignStrokeToPage, convertStrokesToLogical, convertStrokesToScreen, splitStrokesByPage } from "./overlayInkData";
 
-export const NATIVE_PEN_BUTTON_CLS = "mobile-ink-native-pen-button";
+export const NATIVE_PEN_BUTTON_CLS = "mobile-ink-pdf-toolbar-pen";
 export const NATIVE_OVERLAY_CLS = "mobile-ink-native-overlay";
 export const NATIVE_OVERLAY_CAPTURE_CLS = "mobile-ink-native-capture";
 export const NATIVE_OVERLAY_PAGE_CANVAS_CLS = "mobile-ink-native-page-canvas";
@@ -78,12 +78,17 @@ export class NativePdfOverlayManager {
     this.attachPenButton(leaf);
   }
 
+  private getPdfToolbar(containerEl: HTMLElement): HTMLElement | null {
+    return containerEl.querySelector<HTMLElement>(".pdf-toolbar");
+  }
+
   private attachPenButton(leaf: WorkspaceLeaf): void {
-    const button = leaf.view.containerEl.createEl("button", {
-      cls: `${NATIVE_PEN_BUTTON_CLS} mobile-ink-floating-button`,
+    const toolbar = this.getPdfToolbar(leaf.view.containerEl);
+    if (!toolbar) return;
+    const button = toolbar.createEl("button", {
+      cls: `clickable-icon ${NATIVE_PEN_BUTTON_CLS}`,
       attr: { "aria-label": "就地手写批注" }
     });
-    button.style.setProperty("--mobile-ink-tool-color", this.currentInkColor());
     setIcon(button, "pencil");
     button.addEventListener("click", () => void this.enterDrawMode(leaf));
     this.penButton = button;
