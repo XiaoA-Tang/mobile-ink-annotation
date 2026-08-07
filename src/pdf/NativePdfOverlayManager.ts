@@ -48,6 +48,7 @@ export class NativePdfOverlayManager {
   private rectCache = new Map<HTMLElement, ScreenRect>();
   private teardownToken = 0;
   private retryBlockedUntil = 0;
+  private unloaded = false;
 
   constructor(
     private readonly app: App,
@@ -62,6 +63,7 @@ export class NativePdfOverlayManager {
   }
 
   onunload(): void {
+    this.unloaded = true;
     for (const ref of this.eventRefs) this.app.workspace.offref(ref);
     this.eventRefs = [];
     this.removePenButton();
@@ -73,6 +75,7 @@ export class NativePdfOverlayManager {
   }
 
   private update(): void {
+    if (this.unloaded) return;
     const leaf = this.app.workspace.activeLeaf;
     if (this.isActive) {
       if (!leaf || leaf !== this.activeLeaf || leaf.getViewState().type !== "pdf") {
@@ -175,6 +178,7 @@ export class NativePdfOverlayManager {
         this.activeLeaf = null;
         this.teardownOverlay(containerEl);
         this.retryBlockedUntil = performance.now() + 3000;
+        this.removePenButton();
         this.update();
       }
     }
@@ -449,15 +453,18 @@ export class NativePdfOverlayManager {
   }
 
   private async deactivateOverlay(): Promise<void> {
-    this.teardownToken++;
+    const token = ++this.teardownToken;
     const leaf = this.activeLeaf;
     const containerEl = leaf?.view.containerEl;
     this.activeLeaf = null;
+    for (const entry of this.engines) entry.engine.setInputEnabled(false);
     await this.flushSave();
+    if (token !== this.teardownToken) return;
     this.teardownOverlay(containerEl);
     if (leaf) {
       this.currentLeaf = null;
     }
+    this.update();
   }
 
   private teardownOverlay(containerEl?: HTMLElement): void {
@@ -466,6 +473,7 @@ export class NativePdfOverlayManager {
     this.sizeChangedAt = null;
     this.rectCache.clear();
     for (const entry of this.engines) {
+      entry.engine.setInputEnabled(false);
       entry.engine.destroy();
     }
     this.engines = [];
