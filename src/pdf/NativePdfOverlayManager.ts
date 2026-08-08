@@ -28,6 +28,7 @@ export class NativePdfOverlayManager {
     engine: InkEngine;
     page: LogicalPage;
     rect: ScreenRect;
+    basisRect: ScreenRect;
     live: HTMLCanvasElement;
     committed: HTMLCanvasElement;
     pageEl: HTMLElement;
@@ -314,13 +315,13 @@ export class NativePdfOverlayManager {
     const logicalStrokes = this.pageStrokes.get(page.pageNumber) ?? [];
     engine.loadStrokes(convertStrokesToScreen(logicalStrokes, page, rect));
 
-    this.engines.push({ engine, page, rect, live, committed, pageEl });
+    this.engines.push({ engine, page, rect, basisRect: { ...rect }, live, committed, pageEl });
   }
 
   private replacePageStrokes(pageNumber: number): void {
     const entry = this.engines.find((e) => e.page.pageNumber === pageNumber);
     if (!entry) return;
-    const logical = convertStrokesToLogical(entry.engine.getStrokes(), entry.page, entry.rect);
+    const logical = convertStrokesToLogical(entry.engine.getStrokes(), entry.page, entry.basisRect);
     this.pageStrokes.set(pageNumber, logical);
   }
 
