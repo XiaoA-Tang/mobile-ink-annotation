@@ -14,6 +14,10 @@ export const NATIVE_ANNOTATING_CLS = "mobile-ink-native-annotating";
 
 const SETTLE_MS = 200;
 
+const WIDTH_MIN = 1;
+const WIDTH_MAX = 14;
+const WIDTH_PRESETS = [2, 3, 5, 8];
+
 const COLOR_PRIMARIES = ["#111111", "#e53935", "#1e88e5", "#43a047", "#ffb300", "#8e24aa", "#ffffff"];
 
 const COLOR_SHADES: Record<string, string[]> = {
@@ -448,13 +452,14 @@ export class NativePdfOverlayManager {
       this.closeSwatch();
     };
 
-    let selectedPrimary = COLOR_PRIMARIES.find((p) => (COLOR_SHADES[p] ?? []).includes(current)) ?? "#111111";
+    const matched = COLOR_PRIMARIES.find((p) => (COLOR_SHADES[p] ?? []).includes(current));
+    let selectedPrimary = matched ?? "#111111";
 
     const primaryRow = panel.createDiv({ cls: "mobile-ink-swatch-primary-row" });
     for (const color of COLOR_PRIMARIES) {
       const sw = primaryRow.createEl("button", { cls: "mobile-ink-swatch-cell", attr: { "aria-label": color } });
       sw.style.background = color;
-      if (color === selectedPrimary) sw.classList.add("is-active");
+      if (color === selectedPrimary && matched) sw.classList.add("is-active");
       sw.addEventListener("click", () => {
         selectedPrimary = color;
         this.renderShades(shadesEl, color, current, apply);
@@ -501,50 +506,55 @@ export class NativePdfOverlayManager {
 
     const titleRow = panel.createDiv({ cls: "mobile-ink-swatch-title-row" });
     titleRow.createDiv({ cls: "mobile-ink-swatch-title", text: isHighlighter ? "记号笔粗细" : "线条粗细" });
-    const valueEl = titleRow.createDiv({ cls: "mobile-ink-width-value", text: `${current}` });
+    const valueEl = titleRow.createDiv({ cls: "mobile-ink-swatch-width-value", text: `${current}` });
 
     const apply = (w: number): void => {
-      if (isHighlighter) this.applyToolState({ highlighterWidth: w });
-      else this.applyToolState({ width: w });
+      const clamped = Math.max(WIDTH_MIN, Math.min(WIDTH_MAX, Math.round(w)));
+      valueEl.textContent = `${clamped}`;
+      preview.style.height = `${clamped}px`;
+      if (isHighlighter) this.applyToolState({ highlighterWidth: clamped });
+      else this.applyToolState({ width: clamped });
     };
 
     const target = document.createElement("input");
     target.type = "range";
-    target.min = "1";
-    target.max = "12";
+    target.min = String(WIDTH_MIN);
+    target.max = String(WIDTH_MAX);
     target.step = "1";
-    target.value = String(Math.max(1, Math.min(12, Math.round(current))));
-    target.className = "mobile-ink-width-slider";
+    target.value = String(Math.max(WIDTH_MIN, Math.min(WIDTH_MAX, Math.round(current))));
+    target.className = "mobile-ink-swatch-width-slider";
+
+    const syncPresetHighlight = (): void => {
+      const w = Math.max(WIDTH_MIN, Math.min(WIDTH_MAX, Math.round(Number(target.value))));
+      presets.querySelectorAll(".mobile-ink-swatch-width-preset.is-active").forEach((el) => el.classList.remove("is-active"));
+      presets.querySelectorAll<HTMLElement>(".mobile-ink-swatch-width-preset").forEach((el) => {
+        if (Number(el.dataset.width) === w) el.classList.add("is-active");
+      });
+    };
+
     target.addEventListener("input", () => {
-      const w = Math.max(1, Math.min(12, Math.round(Number(target.value))));
-      valueEl.textContent = `${w}`;
-      apply(w);
+      apply(Number(target.value));
+      syncPresetHighlight();
     });
     panel.appendChild(target);
 
-    const preview = panel.createDiv({ cls: "mobile-ink-width-preview-line" });
-    preview.style.height = `${Math.max(1, Math.round(current))}px`;
+    const preview = panel.createDiv({ cls: "mobile-ink-swatch-width-preview-line" });
 
-    const presets = panel.createDiv({ cls: "mobile-ink-width-presets" });
-    for (const w of [2, 3, 5, 8]) {
-      const btn = presets.createEl("button", { cls: "mobile-ink-width-preset", attr: { "aria-label": `${w}` } });
-      const line = btn.createDiv({ cls: "mobile-ink-width-preview" });
+    const presets = panel.createDiv({ cls: "mobile-ink-swatch-width-presets" });
+    for (const w of WIDTH_PRESETS) {
+      const btn = presets.createEl("button", { cls: "mobile-ink-swatch-width-preset", attr: { "aria-label": `${w}`, "data-width": `${w}` } });
+      const line = btn.createDiv({ cls: "mobile-ink-swatch-width-preview" });
       line.style.height = `${w}px`;
-      btn.createDiv({ cls: "mobile-ink-width-label", text: `${w}` });
+      btn.createDiv({ cls: "mobile-ink-swatch-width-label", text: `${w}` });
       if (Math.round(current) === w) btn.classList.add("is-active");
       btn.addEventListener("click", () => {
         target.value = String(w);
-        valueEl.textContent = `${w}`;
-        preview.style.height = `${w}px`;
-        presets.querySelectorAll(".mobile-ink-width-preset.is-active").forEach((el) => el.classList.remove("is-active"));
-        btn.classList.add("is-active");
         apply(w);
+        syncPresetHighlight();
       });
     }
 
-    target.addEventListener("input", () => {
-      presets.querySelectorAll(".mobile-ink-width-preset.is-active").forEach((el) => el.classList.remove("is-active"));
-    });
+    apply(current);
 
     this.swatchEl = panel;
     panel.addEventListener("click", (e) => e.stopPropagation());
