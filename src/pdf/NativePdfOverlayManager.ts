@@ -44,6 +44,7 @@ export class NativePdfOverlayManager {
   private toolbarButtons: Record<string, HTMLElement> = {};
   private colorDot: HTMLElement | null = null;
   private zoomReadout: HTMLElement | null = null;
+  private swatchEl: HTMLElement | null = null;
 
   private followFrame: number | null = null;
   private sizeChangedAt: number | null = null;
@@ -377,10 +378,10 @@ export class NativePdfOverlayManager {
       attr: { "aria-label": "颜色" }
     });
     const colorDot = colorBtn.createDiv({ cls: "mobile-ink-current-color-dot" });
-    colorBtn.addEventListener("click", () => this.cycleColor());
+    colorBtn.addEventListener("click", () => this.openColorSwatch(colorBtn));
     this.toolbarButtons.color = colorBtn;
     this.colorDot = colorDot;
-    addIconButton("width", "sliders-horizontal", "线条粗细", () => this.cycleWidth(), styleGroup);
+    addIconButton("width", "sliders-horizontal", "线条粗细", () => this.openWidthSwatch(), styleGroup);
 
     const historyGroup = dock.createDiv({ cls: "mobile-ink-toolbar-group" });
     addIconButton("undo", "undo-2", "撤销", () => {
@@ -431,6 +432,112 @@ export class NativePdfOverlayManager {
     const next = widths[(widths.indexOf(current) + 1) % widths.length];
     if (this.toolState.tool === "highlighter") this.applyToolState({ highlighterWidth: next });
     else this.applyToolState({ width: next });
+  }
+
+  private openColorSwatch(anchor: HTMLElement): void {
+    this.closeSwatch();
+    if (!this.overlay) return;
+    const panel = this.overlay.createDiv({ cls: "mobile-ink-swatch-panel" });
+    const isHighlighter = this.toolState.tool === "highlighter";
+    const current = isHighlighter ? this.toolState.highlighterColor : this.toolState.color;
+
+    const title = panel.createDiv({ cls: "mobile-ink-swatch-title", text: isHighlighter ? "记号笔颜色" : "颜色" });
+
+    const grid = panel.createDiv({ cls: "mobile-ink-swatch-grid" });
+    const palette = ["#111111", "#e53935", "#1e88e5", "#43a047", "#ffb300", "#8e24aa", "#ffffff"];
+    for (const color of palette) {
+      const sw = grid.createEl("button", { cls: "mobile-ink-swatch-cell", attr: { "aria-label": color } });
+      sw.style.background = color;
+      if (color === current) sw.classList.add("is-active");
+      sw.addEventListener("click", () => {
+        if (isHighlighter) this.applyToolState({ highlighterColor: color });
+        else this.applyToolState({ color });
+        this.closeSwatch();
+      });
+    }
+
+    const customRow = panel.createDiv({ cls: "mobile-ink-swatch-custom" });
+    const customInput = customRow.createEl("input", {
+      type: "color",
+      value: current.startsWith("#") && current.length === 7 ? current : "#111111"
+    });
+    const applyBtn = customRow.createEl("button", { cls: "mobile-ink-swatch-apply", text: "应用" });
+    applyBtn.addEventListener("click", () => {
+      const value = customInput.value;
+      if (isHighlighter) this.applyToolState({ highlighterColor: value });
+      else this.applyToolState({ color: value });
+      this.closeSwatch();
+    });
+
+    this.swatchEl = panel;
+    panel.addEventListener("click", (e) => e.stopPropagation());
+    this.positionSwatch(panel, anchor);
+    this.registerSwatchOutsideClose(panel);
+  }
+
+  private openWidthSwatch(): void {
+    this.closeSwatch();
+    if (!this.overlay) return;
+    const anchor = this.toolbarButtons.width;
+    const panel = this.overlay.createDiv({ cls: "mobile-ink-swatch-panel" });
+    const isHighlighter = this.toolState.tool === "highlighter";
+    const current = isHighlighter ? this.toolState.highlighterWidth : this.toolState.width;
+
+    const title = panel.createDiv({ cls: "mobile-ink-swatch-title", text: isHighlighter ? "记号笔粗细" : "线条粗细" });
+
+    const list = panel.createDiv({ cls: "mobile-ink-width-list" });
+    const widths = [2, 3, 5, 8];
+    for (const w of widths) {
+      const row = list.createEl("button", { cls: "mobile-ink-width-row" });
+      if (w === current) row.classList.add("is-active");
+      const line = row.createDiv({ cls: "mobile-ink-width-preview" });
+      line.style.height = `${Math.max(1, w)}px`;
+      const label = row.createDiv({ cls: "mobile-ink-width-label", text: `${w}` });
+      row.addEventListener("click", () => {
+        if (isHighlighter) this.applyToolState({ highlighterWidth: w });
+        else this.applyToolState({ width: w });
+        this.closeSwatch();
+      });
+    }
+
+    this.swatchEl = panel;
+    panel.addEventListener("click", (e) => e.stopPropagation());
+    if (anchor) this.positionSwatch(panel, anchor);
+    this.registerSwatchOutsideClose(panel);
+  }
+
+  private registerSwatchOutsideClose(panel: HTMLElement): void {
+    const handler = (e: PointerEvent): void => {
+      if (this.swatchEl !== panel) {
+        document.removeEventListener("pointerdown", handler, true);
+        return;
+      }
+      if (!panel.contains(e.target as Node)) {
+        this.closeSwatch();
+        document.removeEventListener("pointerdown", handler, true);
+      }
+    };
+    document.addEventListener("pointerdown", handler, true);
+  }
+
+  private positionSwatch(panel: HTMLElement, anchor: HTMLElement): void {
+    const anchorRect = anchor.getBoundingClientRect();
+    const panelRect = panel.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    let left = anchorRect.left;
+    let top = anchorRect.top - panelRect.height - 8;
+    if (left + panelRect.width > vw) left = Math.max(8, vw - panelRect.width - 8);
+    if (left < 8) left = 8;
+    if (top < 8) top = anchorRect.bottom + 8;
+    if (top + panelRect.height > vh) top = Math.max(8, vh - panelRect.height - 8);
+    panel.style.left = `${left}px`;
+    panel.style.top = `${top}px`;
+  }
+
+  private closeSwatch(): void {
+    this.swatchEl?.remove();
+    this.swatchEl = null;
   }
 
   private markDirty(): void {
@@ -492,6 +599,7 @@ export class NativePdfOverlayManager {
     this.toolbarButtons = {};
     this.colorDot = null;
     this.zoomReadout = null;
+    this.closeSwatch();
   }
 
   collectDiagnostics(): Record<string, unknown> {

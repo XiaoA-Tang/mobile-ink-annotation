@@ -2505,6 +2505,111 @@ input.mobile-ink-pdf-page-input {
   font-variant-numeric: tabular-nums;
 }
 
+.mobile-ink-swatch-panel {
+  position: fixed;
+  z-index: 380;
+  min-width: 168px;
+  max-width: calc(100% - 16px);
+  padding: 10px;
+  border-radius: 14px;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.28);
+  pointer-events: auto;
+  box-sizing: border-box;
+}
+
+.mobile-ink-swatch-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.mobile-ink-swatch-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.mobile-ink-swatch-cell {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 10px;
+  border: 2px solid var(--background-modifier-border);
+  cursor: pointer;
+  padding: 0;
+}
+
+.mobile-ink-swatch-cell.is-active {
+  border-color: var(--interactive-accent);
+  outline: 2px solid color-mix(in srgb, var(--interactive-accent) 40%, transparent);
+  outline-offset: 1px;
+}
+
+.mobile-ink-swatch-custom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.mobile-ink-swatch-custom input[type="color"] {
+  width: 40px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.mobile-ink-swatch-apply {
+  flex: 1;
+  padding: 6px 0;
+  border-radius: 8px;
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+}
+
+.mobile-ink-width-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mobile-ink-width-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--background-modifier-border);
+  background: transparent;
+  cursor: pointer;
+}
+
+.mobile-ink-width-row.is-active {
+  border-color: var(--interactive-accent);
+  background: color-mix(in srgb, var(--interactive-accent) 12%, transparent);
+}
+
+.mobile-ink-width-preview {
+  width: 44px;
+  border-radius: 3px;
+  background: var(--text-normal);
+}
+
+.mobile-ink-width-label {
+  font-size: 13px;
+  color: var(--text-normal);
+  font-variant-numeric: tabular-nums;
+}
+
 .mobile-ink-native-toolbar {
   position: absolute;
   left: 50%;
