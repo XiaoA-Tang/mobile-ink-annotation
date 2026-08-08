@@ -2508,28 +2508,43 @@ input.mobile-ink-pdf-page-input {
 .mobile-ink-swatch-panel {
   position: fixed;
   z-index: 380;
-  min-width: 168px;
+  min-width: 200px;
   max-width: calc(100% - 16px);
-  padding: 10px;
-  border-radius: 14px;
-  background: var(--background-primary);
-  border: 1px solid var(--background-modifier-border);
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.28);
+  padding: 12px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--background-primary) 78%, transparent);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  backdrop-filter: blur(20px) saturate(140%);
+  border: 1px solid color-mix(in srgb, var(--background-modifier-border) 80%, transparent);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
   pointer-events: auto;
   box-sizing: border-box;
+}
+
+.mobile-ink-swatch-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
 }
 
 .mobile-ink-swatch-title {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-muted);
-  margin-bottom: 8px;
 }
 
-.mobile-ink-swatch-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
+.mobile-ink-swatch-current-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--background-modifier-border);
+}
+
+.mobile-ink-swatch-primary-row {
+  display: flex;
   gap: 8px;
+  margin-bottom: 10px;
 }
 
 .mobile-ink-swatch-cell {
@@ -2545,6 +2560,25 @@ input.mobile-ink-pdf-page-input {
   border-color: var(--interactive-accent);
   outline: 2px solid color-mix(in srgb, var(--interactive-accent) 40%, transparent);
   outline-offset: 1px;
+}
+
+.mobile-ink-swatch-primary-row .mobile-ink-swatch-cell {
+  flex: 1;
+  max-width: 40px;
+}
+
+.mobile-ink-swatch-shades {
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--background-secondary) 55%, transparent);
+  margin-bottom: 10px;
+}
+
+.mobile-ink-swatch-shade-cell {
+  flex: 1;
+  max-width: 40px;
 }
 
 .mobile-ink-swatch-custom {

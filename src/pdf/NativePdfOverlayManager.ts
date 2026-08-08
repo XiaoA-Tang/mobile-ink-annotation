@@ -14,6 +14,18 @@ export const NATIVE_ANNOTATING_CLS = "mobile-ink-native-annotating";
 
 const SETTLE_MS = 200;
 
+const COLOR_PRIMARIES = ["#111111", "#e53935", "#1e88e5", "#43a047", "#ffb300", "#8e24aa", "#ffffff"];
+
+const COLOR_SHADES: Record<string, string[]> = {
+  "#111111": ["#eeeeee", "#cccccc", "#888888", "#444444", "#111111"],
+  "#e53935": ["#ffcdd2", "#ef9a9a", "#e57373", "#ef5350", "#e53935"],
+  "#1e88e5": ["#bbdefb", "#90caf9", "#64b5f6", "#42a5f5", "#1e88e5"],
+  "#43a047": ["#c8e6c9", "#a5d6a7", "#81c784", "#66bb6a", "#43a047"],
+  "#ffb300": ["#ffe082", "#ffd54f", "#ffca28", "#ffc107", "#ffb300"],
+  "#8e24aa": ["#e1bee7", "#ce93d8", "#ba68c8", "#ab47bc", "#8e24aa"],
+  "#ffffff": ["#ffffff", "#f5f5f5", "#eeeeee", "#e0e0e0", "#bdbdbd"]
+};
+
 export class NativePdfOverlayManager {
   private penButton: HTMLElement | null = null;
   private currentLeaf: WorkspaceLeaf | null = null;
@@ -418,14 +430,6 @@ export class NativePdfOverlayManager {
     this.refreshToolbar();
   }
 
-  private cycleColor(): void {
-    const palette = ["#111111", "#e53935", "#1e88e5", "#43a047", "#ffb300", "#8e24aa"];
-    const current = this.toolState.tool === "highlighter" ? this.toolState.highlighterColor : this.toolState.color;
-    const next = palette[(palette.indexOf(current) + 1 + palette.length) % palette.length];
-    if (this.toolState.tool === "highlighter") this.applyToolState({ highlighterColor: next });
-    else this.applyToolState({ color: next });
-  }
-
   private cycleWidth(): void {
     const widths = [2, 3, 5, 8];
     const current = this.toolState.tool === "highlighter" ? this.toolState.highlighterWidth : this.toolState.width;
@@ -441,20 +445,34 @@ export class NativePdfOverlayManager {
     const isHighlighter = this.toolState.tool === "highlighter";
     const current = isHighlighter ? this.toolState.highlighterColor : this.toolState.color;
 
-    const title = panel.createDiv({ cls: "mobile-ink-swatch-title", text: isHighlighter ? "记号笔颜色" : "颜色" });
+    const titleRow = panel.createDiv({ cls: "mobile-ink-swatch-title-row" });
+    titleRow.createDiv({ cls: "mobile-ink-swatch-title", text: isHighlighter ? "记号笔颜色" : "颜色" });
+    const currentDot = titleRow.createDiv({ cls: "mobile-ink-swatch-current-dot" });
+    currentDot.style.background = current;
 
-    const grid = panel.createDiv({ cls: "mobile-ink-swatch-grid" });
-    const palette = ["#111111", "#e53935", "#1e88e5", "#43a047", "#ffb300", "#8e24aa", "#ffffff"];
-    for (const color of palette) {
-      const sw = grid.createEl("button", { cls: "mobile-ink-swatch-cell", attr: { "aria-label": color } });
+    const apply = (color: string): void => {
+      if (isHighlighter) this.applyToolState({ highlighterColor: color });
+      else this.applyToolState({ color });
+      this.closeSwatch();
+    };
+
+    let selectedPrimary = COLOR_PRIMARIES.find((p) => (COLOR_SHADES[p] ?? []).includes(current)) ?? "#111111";
+
+    const primaryRow = panel.createDiv({ cls: "mobile-ink-swatch-primary-row" });
+    for (const color of COLOR_PRIMARIES) {
+      const sw = primaryRow.createEl("button", { cls: "mobile-ink-swatch-cell", attr: { "aria-label": color } });
       sw.style.background = color;
-      if (color === current) sw.classList.add("is-active");
+      if (color === selectedPrimary) sw.classList.add("is-active");
       sw.addEventListener("click", () => {
-        if (isHighlighter) this.applyToolState({ highlighterColor: color });
-        else this.applyToolState({ color });
-        this.closeSwatch();
+        selectedPrimary = color;
+        this.renderShades(shadesEl, color, current, apply);
+        primaryRow.querySelectorAll(".mobile-ink-swatch-cell.is-active").forEach((el) => el.classList.remove("is-active"));
+        sw.classList.add("is-active");
       });
     }
+
+    const shadesEl = panel.createDiv({ cls: "mobile-ink-swatch-shades" });
+    this.renderShades(shadesEl, selectedPrimary, current, apply);
 
     const customRow = panel.createDiv({ cls: "mobile-ink-swatch-custom" });
     const customInput = customRow.createEl("input", {
@@ -462,17 +480,23 @@ export class NativePdfOverlayManager {
       value: current.startsWith("#") && current.length === 7 ? current : "#111111"
     });
     const applyBtn = customRow.createEl("button", { cls: "mobile-ink-swatch-apply", text: "应用" });
-    applyBtn.addEventListener("click", () => {
-      const value = customInput.value;
-      if (isHighlighter) this.applyToolState({ highlighterColor: value });
-      else this.applyToolState({ color: value });
-      this.closeSwatch();
-    });
+    applyBtn.addEventListener("click", () => apply(customInput.value));
 
     this.swatchEl = panel;
     panel.addEventListener("click", (e) => e.stopPropagation());
     this.positionSwatch(panel, anchor);
     this.registerSwatchOutsideClose(panel);
+  }
+
+  private renderShades(container: HTMLElement, primary: string, current: string, apply: (c: string) => void): void {
+    container.empty();
+    const shades = COLOR_SHADES[primary] ?? COLOR_SHADES["#111111"];
+    for (const color of shades) {
+      const sw = container.createEl("button", { cls: "mobile-ink-swatch-cell mobile-ink-swatch-shade-cell", attr: { "aria-label": color } });
+      sw.style.background = color;
+      if (color === current) sw.classList.add("is-active");
+      sw.addEventListener("click", () => apply(color));
+    }
   }
 
   private openWidthSwatch(): void {
