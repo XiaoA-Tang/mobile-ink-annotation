@@ -42,6 +42,7 @@ export class NativePdfOverlayManager {
   private toolbar: HTMLElement | null = null;
   private toolbarButtons: Record<string, HTMLElement> = {};
   private colorDot: HTMLElement | null = null;
+  private zoomReadout: HTMLElement | null = null;
 
   private followFrame: number | null = null;
   private sizeChangedAt: number | null = null;
@@ -163,6 +164,7 @@ export class NativePdfOverlayManager {
       this.overlay = containerEl.createDiv({ cls: NATIVE_OVERLAY_CLS, attr: { "aria-hidden": "true" } });
       containerEl.classList.add(NATIVE_ANNOTATING_CLS);
       this.buildToolbar(this.overlay);
+      this.zoomReadout = this.overlay.createDiv({ cls: "mobile-ink-native-zoom-readout", text: "100%" });
 
       const pages = this.getVisiblePages(containerEl);
       for (const { el, pageNumber, rect } of pages) {
@@ -204,6 +206,8 @@ export class NativePdfOverlayManager {
   private syncPageTracking(containerEl: HTMLElement): void {
     const pages = this.getVisiblePages(containerEl);
 
+    this.updateZoomReadout(pages);
+
     for (const entry of Array.from(this.engines)) {
       const stillVisible = pages.some((p) => p.el === entry.pageEl);
       const connected = entry.pageEl.isConnected && entry.live.isConnected;
@@ -238,6 +242,22 @@ export class NativePdfOverlayManager {
     if (this.sizeChangedAt !== null && performance.now() - this.sizeChangedAt > SETTLE_MS) {
       this.sizeChangedAt = null;
       this.relayout(containerEl);
+    }
+  }
+
+  private updateZoomReadout(pages: Array<{ el: HTMLElement; pageNumber: number; rect: ScreenRect }>): void {
+    if (!this.zoomReadout) return;
+    let scale = 1;
+    for (const p of pages) {
+      const page = this.layout?.pages[p.pageNumber - 1];
+      if (!page || page.width <= 0 || p.rect.width <= 0) continue;
+      scale = p.rect.width / page.width;
+      break;
+    }
+    const percent = Math.round(scale * 100);
+    const text = `${percent}%`;
+    if (this.zoomReadout.textContent !== text) {
+      this.zoomReadout.textContent = text;
     }
   }
 
@@ -470,5 +490,6 @@ export class NativePdfOverlayManager {
     this.toolbar = null;
     this.toolbarButtons = {};
     this.colorDot = null;
+    this.zoomReadout = null;
   }
 }
