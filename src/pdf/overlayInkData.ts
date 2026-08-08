@@ -4,10 +4,6 @@ import type {
   LogicalPageLayout,
   ScreenRect
 } from "./nativePdfGeometry.ts";
-import {
-  logicalToScreen,
-  screenToLogical
-} from "./nativePdfGeometry.ts";
 
 export function assignStrokeToPage(stroke: InkStroke, layout: LogicalPageLayout): LogicalPage | null {
   const bounds = getStrokeBounds(stroke);
@@ -45,8 +41,12 @@ export function convertStrokesToScreen(strokes: InkStroke[], page: LogicalPage, 
     ...stroke,
     width: Math.max(0.5, stroke.width * widthScale),
     points: stroke.points.map((point) => {
-      const pt = logicalToScreen(page, rect, point.x, point.y);
-      return { ...point, x: pt.x, y: pt.y };
+      const localY = point.y - page.offsetY;
+      return {
+        ...point,
+        x: (point.x / Math.max(1, page.width)) * rect.width,
+        y: (localY / Math.max(1, page.height)) * rect.height
+      };
     })
   }));
 }
@@ -59,8 +59,12 @@ export function convertStrokesToLogical(strokes: InkStroke[], page: LogicalPage,
     ...stroke,
     width: Math.max(0.5, stroke.width / widthScale),
     points: stroke.points.map((point) => {
-      const pt = screenToLogical(page, rect, point.x, point.y);
-      return { ...point, x: pt.x, y: pt.y };
+      const localY = (point.y / Math.max(1, rect.height)) * page.height;
+      return {
+        ...point,
+        x: (point.x / Math.max(1, rect.width)) * page.width,
+        y: page.offsetY + localY
+      };
     })
   }));
 }

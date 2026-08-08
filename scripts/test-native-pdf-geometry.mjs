@@ -73,6 +73,16 @@ assert("toLogical x", Math.round(back[0].points[0].x), 100);
 assert("toLogical y", Math.round(back[0].points[0].y), 500);
 assert("toLogical width", Math.round(back[0].width), 2);
 
+// 5b. 画布嵌入 .page 局部坐标：convertStrokes* 必须忽略 rect.left/top（视口偏移），
+//     只按页面内缩放换算。缩放居中后 rect.left/top 变负，若仍带偏移会导致笔画朝左上漂移。
+const rect3 = { left: 50, top: 30, width: 480, height: 621 };
+const screen3 = convertStrokesToScreen([strokeP1], layout2.pages[0], rect3);
+assert("toScreen x ignores rect.left", Math.round(screen3[0].points[0].x * 100) / 100, 50);
+assert("toScreen y ignores rect.top", Math.round(screen3[0].points[0].y * 100) / 100, 250);
+const back3 = convertStrokesToLogical(screen3, layout2.pages[0], rect3);
+assert("toLogical x roundtrip", Math.round(back3[0].points[0].x), 100);
+assert("toLogical y roundtrip", Math.round(back3[0].points[0].y), 500);
+
 if (failed > 0) {
   console.error(`FAILED: ${failed} assertion(s)`);
   process.exit(1);
