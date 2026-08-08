@@ -59,6 +59,22 @@ export default class MobileInkAnnotationPlugin extends Plugin {
       }
     });
 
+    this.addCommand({
+      id: "dump-native-overlay-diagnostics",
+      name: "导出原生覆盖层诊断日志到笔记 (调试)",
+      checkCallback: (checking) => {
+        if (checking) return true;
+        const data = this.nativePdfOverlay.collectDiagnostics();
+        const text = "```json\n" + JSON.stringify(data, null, 2) + "\n```";
+        const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+        const notePath = `mobile-ink-diagnostics-${stamp}.md`;
+        void this.app.vault.create(notePath, `# Mobile Ink 诊断日志\n\n时间: ${new Date().toISOString()}\n\n${text}\n`)
+          .then(() => new Notice(`诊断日志已写入 ${notePath}`))
+          .catch((e) => new Notice("诊断日志写入失败: " + String(e)));
+        return true;
+      }
+    });
+
     this.addSettingTab(new MobileInkAnnotationSettingTab(this.app, this));
 
     this.addRibbonIcon("pencil", "打开手写标注", async () => {

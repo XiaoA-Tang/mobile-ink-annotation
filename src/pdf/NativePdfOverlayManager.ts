@@ -493,4 +493,36 @@ export class NativePdfOverlayManager {
     this.colorDot = null;
     this.zoomReadout = null;
   }
+
+  collectDiagnostics(): Record<string, unknown> {
+    const leaf = this.activeLeaf;
+    const containerEl = leaf?.view.containerEl;
+    const layout = this.layout;
+    const pages: Array<Record<string, unknown>> = [];
+    containerEl?.querySelectorAll<HTMLElement>(".page").forEach((el) => {
+      const r = el.getBoundingClientRect();
+      const fromAttr = Number(el.getAttribute("data-page-number")) || Number(el.dataset.pageNumber);
+      const pageNumber = Number.isFinite(fromAttr) && fromAttr > 0 ? fromAttr : 0;
+      const entry = this.engines.find((e) => e.pageEl === el);
+      pages.push({
+        pageNumber,
+        rect: { left: Math.round(r.left), top: Math.round(r.top), width: Math.round(r.width), height: Math.round(r.height) },
+        canvasLocal: entry ? { width: entry.live.width, height: entry.live.height } : null,
+        logical: entry
+          ? { width: Math.round(entry.page.width), height: Math.round(entry.page.height), offsetY: Math.round(entry.page.offsetY) }
+          : null,
+        strokeCount: entry ? entry.engine.getStrokes().length : null
+      });
+    });
+    return {
+      active: this.isActive,
+      drawFile: this.drawFile?.path ?? null,
+      layout: layout
+        ? { pageWidth: Math.round(layout.pageWidth), pageHeight: Math.round(layout.pageHeight), pages: layout.pages.length }
+        : null,
+      zoomReadout: this.zoomReadout?.textContent ?? null,
+      engineCount: this.engines.length,
+      pages
+    };
+  }
 }
