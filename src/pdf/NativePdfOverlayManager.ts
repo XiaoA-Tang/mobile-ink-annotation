@@ -430,14 +430,6 @@ export class NativePdfOverlayManager {
     this.refreshToolbar();
   }
 
-  private cycleWidth(): void {
-    const widths = [2, 3, 5, 8];
-    const current = this.toolState.tool === "highlighter" ? this.toolState.highlighterWidth : this.toolState.width;
-    const next = widths[(widths.indexOf(current) + 1) % widths.length];
-    if (this.toolState.tool === "highlighter") this.applyToolState({ highlighterWidth: next });
-    else this.applyToolState({ width: next });
-  }
-
   private openColorSwatch(anchor: HTMLElement): void {
     this.closeSwatch();
     if (!this.overlay) return;
@@ -507,22 +499,52 @@ export class NativePdfOverlayManager {
     const isHighlighter = this.toolState.tool === "highlighter";
     const current = isHighlighter ? this.toolState.highlighterWidth : this.toolState.width;
 
-    const title = panel.createDiv({ cls: "mobile-ink-swatch-title", text: isHighlighter ? "记号笔粗细" : "线条粗细" });
+    const titleRow = panel.createDiv({ cls: "mobile-ink-swatch-title-row" });
+    titleRow.createDiv({ cls: "mobile-ink-swatch-title", text: isHighlighter ? "记号笔粗细" : "线条粗细" });
+    const valueEl = titleRow.createDiv({ cls: "mobile-ink-width-value", text: `${current}` });
 
-    const list = panel.createDiv({ cls: "mobile-ink-width-list" });
-    const widths = [2, 3, 5, 8];
-    for (const w of widths) {
-      const row = list.createEl("button", { cls: "mobile-ink-width-row" });
-      if (w === current) row.classList.add("is-active");
-      const line = row.createDiv({ cls: "mobile-ink-width-preview" });
-      line.style.height = `${Math.max(1, w)}px`;
-      const label = row.createDiv({ cls: "mobile-ink-width-label", text: `${w}` });
-      row.addEventListener("click", () => {
-        if (isHighlighter) this.applyToolState({ highlighterWidth: w });
-        else this.applyToolState({ width: w });
-        this.closeSwatch();
+    const apply = (w: number): void => {
+      if (isHighlighter) this.applyToolState({ highlighterWidth: w });
+      else this.applyToolState({ width: w });
+    };
+
+    const target = document.createElement("input");
+    target.type = "range";
+    target.min = "1";
+    target.max = "12";
+    target.step = "1";
+    target.value = String(Math.max(1, Math.min(12, Math.round(current))));
+    target.className = "mobile-ink-width-slider";
+    target.addEventListener("input", () => {
+      const w = Math.max(1, Math.min(12, Math.round(Number(target.value))));
+      valueEl.textContent = `${w}`;
+      apply(w);
+    });
+    panel.appendChild(target);
+
+    const preview = panel.createDiv({ cls: "mobile-ink-width-preview-line" });
+    preview.style.height = `${Math.max(1, Math.round(current))}px`;
+
+    const presets = panel.createDiv({ cls: "mobile-ink-width-presets" });
+    for (const w of [2, 3, 5, 8]) {
+      const btn = presets.createEl("button", { cls: "mobile-ink-width-preset", attr: { "aria-label": `${w}` } });
+      const line = btn.createDiv({ cls: "mobile-ink-width-preview" });
+      line.style.height = `${w}px`;
+      btn.createDiv({ cls: "mobile-ink-width-label", text: `${w}` });
+      if (Math.round(current) === w) btn.classList.add("is-active");
+      btn.addEventListener("click", () => {
+        target.value = String(w);
+        valueEl.textContent = `${w}`;
+        preview.style.height = `${w}px`;
+        presets.querySelectorAll(".mobile-ink-width-preset.is-active").forEach((el) => el.classList.remove("is-active"));
+        btn.classList.add("is-active");
+        apply(w);
       });
     }
+
+    target.addEventListener("input", () => {
+      presets.querySelectorAll(".mobile-ink-width-preset.is-active").forEach((el) => el.classList.remove("is-active"));
+    });
 
     this.swatchEl = panel;
     panel.addEventListener("click", (e) => e.stopPropagation());
