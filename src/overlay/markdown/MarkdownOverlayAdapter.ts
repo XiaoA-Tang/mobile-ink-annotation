@@ -22,6 +22,7 @@ const RESIZE_DEBOUNCE_MS = 200;
 
 export class MarkdownOverlayAdapter {
   private unloaded = false;
+  private teardownToken = 0;
   private eventRefs: ReturnType<Workspace["on"]>[] = [];
 
   private currentLeaf: WorkspaceLeaf | null = null;
@@ -124,6 +125,7 @@ export class MarkdownOverlayAdapter {
 
   private async activate(leaf: WorkspaceLeaf): Promise<void> {
     if (this.isActive) return;
+    const token = ++this.teardownToken;
     const file = (leaf.view as unknown as { file?: TFile }).file;
     if (!(file instanceof TFile) || file.extension !== "md") return;
 
@@ -138,11 +140,13 @@ export class MarkdownOverlayAdapter {
     }
     this.preview = preview;
     await waitForImages(preview);
+    if (token !== this.teardownToken || this.unloaded) return;
 
     this.pageWidth = Math.max(1, Math.round(preview.clientWidth));
     this.pageHeight = Math.max(1, Math.round(preview.scrollHeight));
 
     const annotation = await this.store.load(file.path, this.pageWidth, this.pageHeight);
+    if (token !== this.teardownToken || this.unloaded) return;
     const scale = mdLoadScale(annotation, this.pageWidth);
     this.strokes = convertStrokesFromAnnotation(annotation.strokes, scale);
 
@@ -303,7 +307,7 @@ export class MarkdownOverlayAdapter {
         written.add(s.id);
       }
     }
-    this.strokes = logical;
+    this.strokes = logical.filter((s) => written.has(s.id));
 
     const annotation = await this.store.load(file.path, this.pageWidth, this.pageHeight);
     annotation.pageWidth = this.pageWidth;
@@ -318,6 +322,7 @@ export class MarkdownOverlayAdapter {
   }
 
   private async deactivate(): Promise<void> {
+    const token = ++this.teardownToken;
     const leaf = this.activeLeaf;
     const containerEl = this.containerEl;
     this.activeLeaf = null;
@@ -325,6 +330,7 @@ export class MarkdownOverlayAdapter {
     if (this.engine) {
       this.engine.setInputEnabled(false);
       await this.toolkit?.flush();
+      if (token !== this.teardownToken) return;
     }
     this.teardown(containerEl);
     this.update();
