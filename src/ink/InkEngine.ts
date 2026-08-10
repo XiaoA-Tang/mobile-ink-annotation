@@ -1022,7 +1022,7 @@ export class InkEngine {
 
     if (target.closest(
       ".mobile-ink-toolbar, .mobile-ink-pdf-page-nav, .mobile-ink-native-toolbar, " +
-      ".mobile-ink-pdf-toolbar-pen, .pdf-toolbar"
+      ".mobile-ink-pdf-toolbar-pen, .pdf-toolbar, .mobile-ink-swatch-panel"
     )) return true;
 
     if (target.closest(".mobile-ink-object-control, .mobile-ink-object-resize-handle, .mobile-ink-object-delete")) {

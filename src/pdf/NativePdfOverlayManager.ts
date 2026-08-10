@@ -6,29 +6,15 @@ import { resolveInkCanvasBudget } from "../ink/inkBudget";
 import { PdfJsDocument, PdfJsLib } from "../views/annotationTypes";
 import { buildUniformPageLayout, computePageSizeFromPdf, LogicalPage, LogicalPageLayout, ScreenRect } from "./nativePdfGeometry";
 import { assignStrokeToPage, convertStrokesToLogical, convertStrokesToScreen, splitStrokesByPage } from "./overlayInkData";
+import { OverlayToolbar } from "../overlay/shared/OverlayToolbar";
+import { OverlayToolkit } from "../overlay/shared/OverlayToolkit";
+import { OverlayEngineEntry } from "../overlay/shared/types";
 
 export const NATIVE_PEN_BUTTON_CLS = "mobile-ink-pdf-toolbar-pen";
 export const NATIVE_OVERLAY_CLS = "mobile-ink-native-overlay";
 export const NATIVE_OVERLAY_PAGE_CANVAS_CLS = "mobile-ink-native-page-canvas";
 export const NATIVE_ANNOTATING_CLS = "mobile-ink-native-annotating";
-
 const SETTLE_MS = 200;
-
-const WIDTH_MIN = 1;
-const WIDTH_MAX = 14;
-const WIDTH_PRESETS = [2, 3, 5, 8];
-
-const COLOR_PRIMARIES = ["#111111", "#e53935", "#1e88e5", "#43a047", "#ffb300", "#8e24aa", "#ffffff"];
-
-const COLOR_SHADES: Record<string, string[]> = {
-  "#111111": ["#eeeeee", "#cccccc", "#888888", "#444444", "#111111"],
-  "#e53935": ["#ffcdd2", "#ef9a9a", "#e57373", "#ef5350", "#e53935"],
-  "#1e88e5": ["#bbdefb", "#90caf9", "#64b5f6", "#42a5f5", "#1e88e5"],
-  "#43a047": ["#c8e6c9", "#a5d6a7", "#81c784", "#66bb6a", "#43a047"],
-  "#ffb300": ["#ffe082", "#ffd54f", "#ffca28", "#ffc107", "#ffb300"],
-  "#8e24aa": ["#e1bee7", "#ce93d8", "#ba68c8", "#ab47bc", "#8e24aa"],
-  "#ffffff": ["#ffffff", "#f5f5f5", "#eeeeee", "#e0e0e0", "#bdbdbd"]
-};
 
 export class NativePdfOverlayManager {
   private penButton: HTMLElement | null = null;
@@ -40,27 +26,10 @@ export class NativePdfOverlayManager {
   private drawFile: TFile | null = null;
   private layout: LogicalPageLayout | null = null;
   private pageStrokes: Map<number, InkStroke[]> = new Map();
-  private engines: Array<{
-    engine: InkEngine;
-    page: LogicalPage;
-    rect: ScreenRect;
-    basisRect: ScreenRect;
-    live: HTMLCanvasElement;
-    committed: HTMLCanvasElement;
-    pageEl: HTMLElement;
-  }> = [];
-  private toolState: InkToolState = {
-    tool: "pen", color: "#111111", width: 2,
-    highlighterColor: "#ffd54a", highlighterWidth: 14,
-    eraserRadius: 18, acceptTouchInput: false
-  };
-  private saveTimer: number | null = null;
-  private dirty = false;
-  private toolbar: HTMLElement | null = null;
-  private toolbarButtons: Record<string, HTMLElement> = {};
-  private colorDot: HTMLElement | null = null;
+  private engines: OverlayEngineEntry[] = [];
+  private toolbar: OverlayToolbar | null = null;
+  private toolkit: OverlayToolkit | null = null;
   private zoomReadout: HTMLElement | null = null;
-  private swatchEl: HTMLElement | null = null;
 
   private followFrame: number | null = null;
   private sizeChangedAt: number | null = null;
@@ -139,7 +108,8 @@ export class NativePdfOverlayManager {
   }
 
   private toggleToolbar(): void {
-    this.toolbar?.classList.toggle("is-collapsed");
+    if (!this.toolbar) return;
+    this.toolbar.setCollapsed(!this.toolbar.isCollapsed());
   }
 
   private async activateOverlay(leaf: WorkspaceLeaf): Promise<void> {
@@ -181,7 +151,20 @@ export class NativePdfOverlayManager {
 
       this.overlay = containerEl.createDiv({ cls: NATIVE_OVERLAY_CLS, attr: { "aria-hidden": "true" } });
       containerEl.classList.add(NATIVE_ANNOTATING_CLS);
-      this.buildToolbar(this.overlay);
+
+      this.toolkit = new OverlayToolkit(
+        { app: this.app, store: this.store },
+        () => this.flushSave()
+      );
+      this.toolbar = new OverlayToolbar({
+        getToolState: () => this.toolkit!.toolState,
+        applyToolState: (patch) => this.applyToolState(patch),
+        onUndo: () => { for (const e of this.engines) e.engine.undo(); this.toolbar?.refresh(); this.toolkit?.markDirty(); },
+        onRedo: () => { for (const e of this.engines) e.engine.redo(); this.toolbar?.refresh(); this.toolkit?.markDirty(); },
+        getOverlay: () => this.overlay,
+        getWidthAnchor: () => this.toolbar?.buttons.width ?? null
+      });
+      this.toolbar.build(this.overlay);
       this.zoomReadout = this.overlay.createDiv({ cls: "mobile-ink-native-zoom-readout", text: "100%" });
 
       const pages = this.getVisiblePages(containerEl);
@@ -190,6 +173,7 @@ export class NativePdfOverlayManager {
         if (!page) continue;
         this.createPageEngine(containerEl, el, page, rect);
       }
+      this.linkEnginesToToolkit();
 
       this.followFrame = window.requestAnimationFrame(this.followTick);
       this.retryBlockedUntil = 0;
@@ -204,6 +188,10 @@ export class NativePdfOverlayManager {
         this.update();
       }
     }
+  }
+
+  private linkEnginesToToolkit(): void {
+    this.toolkit?.setActiveEngines(this.engines.map((e) => e.engine));
   }
 
   private followTick = (): void => {
@@ -223,7 +211,6 @@ export class NativePdfOverlayManager {
 
   private syncPageTracking(containerEl: HTMLElement): void {
     const pages = this.getVisiblePages(containerEl);
-
     this.updateZoomReadout(pages);
 
     for (const entry of Array.from(this.engines)) {
@@ -237,6 +224,7 @@ export class NativePdfOverlayManager {
       entry.committed.remove();
       this.engines.splice(this.engines.indexOf(entry), 1);
     }
+    this.linkEnginesToToolkit();
 
     for (const p of pages) {
       if (this.engines.some((e) => e.pageEl === p.el)) continue;
@@ -244,6 +232,7 @@ export class NativePdfOverlayManager {
       if (!page) continue;
       this.createPageEngine(containerEl, p.el, page, p.rect);
     }
+    this.linkEnginesToToolkit();
 
     let sizeChanged = false;
     for (const p of pages) {
@@ -260,6 +249,7 @@ export class NativePdfOverlayManager {
     if (this.sizeChangedAt !== null && performance.now() - this.sizeChangedAt > SETTLE_MS) {
       this.sizeChangedAt = null;
       this.relayout(containerEl);
+      this.linkEnginesToToolkit();
     }
   }
 
@@ -315,12 +305,12 @@ export class NativePdfOverlayManager {
     pageEl.append(live, committed);
 
     const engine = new InkEngine(live, committed, containerEl, {
-      initialToolState: { ...this.toolState },
+      initialToolState: { ...this.toolkit!.toolState },
       canvasMaxDpr: 3,
       canvasMaxPixels: resolveInkCanvasBudget(Platform.isMobile),
       panOutsideCanvas: false,
-      onInputStart: () => this.markDirty(),
-      onChange: () => this.markDirty()
+      onInputStart: () => this.toolkit!.markDirty(),
+      onChange: () => this.toolkit!.markDirty()
     });
     engine.resize(width, height);
     engine.setDisplayScale(1);
@@ -359,253 +349,13 @@ export class NativePdfOverlayManager {
     }
   }
 
-  private buildToolbar(containerEl: HTMLElement): void {
-    const bar = containerEl.createDiv({ cls: "mobile-ink-native-toolbar" });
-    this.toolbar = bar;
-    const dock = bar.createDiv({ cls: "mobile-ink-toolbar-dock" });
-
-    const addToolButton = (key: string, icon: string, label: string, action: () => void, group: HTMLElement): void => {
-      const btn = group.createEl("button", {
-        cls: "mobile-ink-icon-button mobile-ink-tool-button",
-        attr: { "aria-label": label }
-      });
-      setIcon(btn, icon);
-      btn.addEventListener("click", action);
-      this.toolbarButtons[key] = btn;
-    };
-    const addIconButton = (key: string, icon: string, label: string, action: () => void, group: HTMLElement): void => {
-      const btn = group.createEl("button", {
-        cls: "mobile-ink-icon-button",
-        attr: { "aria-label": label }
-      });
-      setIcon(btn, icon);
-      btn.addEventListener("click", action);
-      this.toolbarButtons[key] = btn;
-    };
-
-    const toolGroup = dock.createDiv({ cls: "mobile-ink-toolbar-group" });
-    addToolButton("pen", "pencil", "画笔", () => this.applyToolState({ tool: "pen" }), toolGroup);
-    addToolButton("highlighter", "highlighter", "记号笔", () => this.applyToolState({ tool: "highlighter" }), toolGroup);
-    addToolButton("eraser", "eraser", "橡皮擦", () => this.applyToolState({ tool: "eraser" }), toolGroup);
-
-    const styleGroup = dock.createDiv({ cls: "mobile-ink-toolbar-group" });
-    const colorBtn = styleGroup.createEl("button", {
-      cls: "mobile-ink-current-color-button",
-      attr: { "aria-label": "颜色" }
-    });
-    const colorDot = colorBtn.createDiv({ cls: "mobile-ink-current-color-dot" });
-    colorBtn.addEventListener("click", () => this.openColorSwatch(colorBtn));
-    this.toolbarButtons.color = colorBtn;
-    this.colorDot = colorDot;
-    addIconButton("width", "sliders-horizontal", "线条粗细", () => this.openWidthSwatch(), styleGroup);
-
-    const historyGroup = dock.createDiv({ cls: "mobile-ink-toolbar-group" });
-    addIconButton("undo", "undo-2", "撤销", () => {
-      for (const e of this.engines) e.engine.undo();
-      this.refreshToolbar();
-    }, historyGroup);
-    addIconButton("redo", "redo-2", "重做", () => {
-      for (const e of this.engines) e.engine.redo();
-      this.refreshToolbar();
-    }, historyGroup);
-
-    this.refreshToolbar();
-  }
-
-  private currentInkColor(): string {
-    return this.toolState.tool === "highlighter" ? this.toolState.highlighterColor : this.toolState.color;
-  }
-
-  private refreshToolbar(): void {
-    if (!this.toolbar) return;
-    this.toolbar.style.setProperty("--mobile-ink-tool-color", this.currentInkColor());
-    for (const key of ["pen", "highlighter", "eraser"]) {
-      const el = this.toolbarButtons[key];
-      if (el) el.classList.toggle("mobile-ink-active", this.toolState.tool === key);
-    }
-    if (this.colorDot) {
-      this.colorDot.style.background = this.currentInkColor();
-    }
-  }
-
   private applyToolState(patch: Partial<InkToolState>): void {
-    Object.assign(this.toolState, patch);
-    for (const e of this.engines) e.engine.setToolState({ ...patch });
-    this.refreshToolbar();
-  }
-
-  private openColorSwatch(anchor: HTMLElement): void {
-    this.closeSwatch();
-    if (!this.overlay) return;
-    const panel = this.overlay.createDiv({ cls: "mobile-ink-swatch-panel" });
-    const isHighlighter = this.toolState.tool === "highlighter";
-    const current = isHighlighter ? this.toolState.highlighterColor : this.toolState.color;
-
-    const titleRow = panel.createDiv({ cls: "mobile-ink-swatch-title-row" });
-    titleRow.createDiv({ cls: "mobile-ink-swatch-title", text: isHighlighter ? "记号笔颜色" : "颜色" });
-    const currentDot = titleRow.createDiv({ cls: "mobile-ink-swatch-current-dot" });
-    currentDot.style.background = current;
-
-    const apply = (color: string): void => {
-      if (isHighlighter) this.applyToolState({ highlighterColor: color });
-      else this.applyToolState({ color });
-      this.closeSwatch();
-    };
-
-    const matched = COLOR_PRIMARIES.find((p) => (COLOR_SHADES[p] ?? []).includes(current));
-    let selectedPrimary = matched ?? "#111111";
-
-    const primaryRow = panel.createDiv({ cls: "mobile-ink-swatch-primary-row" });
-    for (const color of COLOR_PRIMARIES) {
-      const sw = primaryRow.createEl("button", { cls: "mobile-ink-swatch-cell", attr: { "aria-label": color } });
-      sw.style.background = color;
-      if (color === selectedPrimary && matched) sw.classList.add("is-active");
-      sw.addEventListener("click", () => {
-        selectedPrimary = color;
-        this.renderShades(shadesEl, color, current, apply);
-        primaryRow.querySelectorAll(".mobile-ink-swatch-cell.is-active").forEach((el) => el.classList.remove("is-active"));
-        sw.classList.add("is-active");
-      });
-    }
-
-    const shadesEl = panel.createDiv({ cls: "mobile-ink-swatch-shades" });
-    this.renderShades(shadesEl, selectedPrimary, current, apply);
-
-    const customRow = panel.createDiv({ cls: "mobile-ink-swatch-custom" });
-    const customInput = customRow.createEl("input", {
-      type: "color",
-      value: current.startsWith("#") && current.length === 7 ? current : "#111111"
-    });
-    const applyBtn = customRow.createEl("button", { cls: "mobile-ink-swatch-apply", text: "应用" });
-    applyBtn.addEventListener("click", () => apply(customInput.value));
-
-    this.swatchEl = panel;
-    panel.addEventListener("click", (e) => e.stopPropagation());
-    this.positionSwatch(panel, anchor);
-    this.registerSwatchOutsideClose(panel);
-  }
-
-  private renderShades(container: HTMLElement, primary: string, current: string, apply: (c: string) => void): void {
-    container.empty();
-    const shades = COLOR_SHADES[primary] ?? COLOR_SHADES["#111111"];
-    for (const color of shades) {
-      const sw = container.createEl("button", { cls: "mobile-ink-swatch-cell mobile-ink-swatch-shade-cell", attr: { "aria-label": color } });
-      sw.style.background = color;
-      if (color === current) sw.classList.add("is-active");
-      sw.addEventListener("click", () => apply(color));
-    }
-  }
-
-  private openWidthSwatch(): void {
-    this.closeSwatch();
-    if (!this.overlay) return;
-    const anchor = this.toolbarButtons.width;
-    const panel = this.overlay.createDiv({ cls: "mobile-ink-swatch-panel" });
-    const isHighlighter = this.toolState.tool === "highlighter";
-    const current = isHighlighter ? this.toolState.highlighterWidth : this.toolState.width;
-
-    const titleRow = panel.createDiv({ cls: "mobile-ink-swatch-title-row" });
-    titleRow.createDiv({ cls: "mobile-ink-swatch-title", text: isHighlighter ? "记号笔粗细" : "线条粗细" });
-    const valueEl = titleRow.createDiv({ cls: "mobile-ink-swatch-width-value", text: `${current}` });
-
-    const apply = (w: number): void => {
-      const clamped = Math.max(WIDTH_MIN, Math.min(WIDTH_MAX, Math.round(w)));
-      valueEl.textContent = `${clamped}`;
-      preview.style.height = `${clamped}px`;
-      if (isHighlighter) this.applyToolState({ highlighterWidth: clamped });
-      else this.applyToolState({ width: clamped });
-    };
-
-    const target = document.createElement("input");
-    target.type = "range";
-    target.min = String(WIDTH_MIN);
-    target.max = String(WIDTH_MAX);
-    target.step = "1";
-    target.value = String(Math.max(WIDTH_MIN, Math.min(WIDTH_MAX, Math.round(current))));
-    target.className = "mobile-ink-swatch-width-slider";
-
-    const syncPresetHighlight = (): void => {
-      const w = Math.max(WIDTH_MIN, Math.min(WIDTH_MAX, Math.round(Number(target.value))));
-      presets.querySelectorAll(".mobile-ink-swatch-width-preset.is-active").forEach((el) => el.classList.remove("is-active"));
-      presets.querySelectorAll<HTMLElement>(".mobile-ink-swatch-width-preset").forEach((el) => {
-        if (Number(el.dataset.width) === w) el.classList.add("is-active");
-      });
-    };
-
-    target.addEventListener("input", () => {
-      apply(Number(target.value));
-      syncPresetHighlight();
-    });
-    panel.appendChild(target);
-
-    const preview = panel.createDiv({ cls: "mobile-ink-swatch-width-preview-line" });
-
-    const presets = panel.createDiv({ cls: "mobile-ink-swatch-width-presets" });
-    for (const w of WIDTH_PRESETS) {
-      const btn = presets.createEl("button", { cls: "mobile-ink-swatch-width-preset", attr: { "aria-label": `${w}`, "data-width": `${w}` } });
-      const line = btn.createDiv({ cls: "mobile-ink-swatch-width-preview" });
-      line.style.height = `${w}px`;
-      btn.createDiv({ cls: "mobile-ink-swatch-width-label", text: `${w}` });
-      if (Math.round(current) === w) btn.classList.add("is-active");
-      btn.addEventListener("click", () => {
-        target.value = String(w);
-        apply(w);
-        syncPresetHighlight();
-      });
-    }
-
-    apply(current);
-
-    this.swatchEl = panel;
-    panel.addEventListener("click", (e) => e.stopPropagation());
-    if (anchor) this.positionSwatch(panel, anchor);
-    this.registerSwatchOutsideClose(panel);
-  }
-
-  private registerSwatchOutsideClose(panel: HTMLElement): void {
-    const handler = (e: PointerEvent): void => {
-      if (this.swatchEl !== panel) {
-        document.removeEventListener("pointerdown", handler, true);
-        return;
-      }
-      if (!panel.contains(e.target as Node)) {
-        this.closeSwatch();
-        document.removeEventListener("pointerdown", handler, true);
-      }
-    };
-    document.addEventListener("pointerdown", handler, true);
-  }
-
-  private positionSwatch(panel: HTMLElement, anchor: HTMLElement): void {
-    const anchorRect = anchor.getBoundingClientRect();
-    const panelRect = panel.getBoundingClientRect();
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    let left = anchorRect.left;
-    let top = anchorRect.top - panelRect.height - 8;
-    if (left + panelRect.width > vw) left = Math.max(8, vw - panelRect.width - 8);
-    if (left < 8) left = 8;
-    if (top < 8) top = anchorRect.bottom + 8;
-    if (top + panelRect.height > vh) top = Math.max(8, vh - panelRect.height - 8);
-    panel.style.left = `${left}px`;
-    panel.style.top = `${top}px`;
-  }
-
-  private closeSwatch(): void {
-    this.swatchEl?.remove();
-    this.swatchEl = null;
-  }
-
-  private markDirty(): void {
-    this.dirty = true;
-    if (this.saveTimer !== null) window.clearTimeout(this.saveTimer);
-    this.saveTimer = window.setTimeout(() => void this.flushSave(), 800);
+    this.toolkit!.applyToolState(patch);
+    this.toolbar?.refresh();
   }
 
   private async flushSave(): Promise<void> {
-    if (!this.dirty || !this.layout) return;
-    this.dirty = false;
-    if (this.saveTimer !== null) { window.clearTimeout(this.saveTimer); this.saveTimer = null; }
+    if (!this.toolkit || !this.layout) return;
     const file = this.drawFile;
     if (!(file instanceof TFile)) return;
     for (const entry of this.engines) {
@@ -627,7 +377,7 @@ export class NativePdfOverlayManager {
     const containerEl = leaf?.view.containerEl;
     this.activeLeaf = null;
     for (const entry of this.engines) entry.engine.setInputEnabled(false);
-    await this.flushSave();
+    await this.toolkit?.flush();
     if (token !== this.teardownToken) return;
     this.teardownOverlay(containerEl);
     if (leaf) {
@@ -637,7 +387,6 @@ export class NativePdfOverlayManager {
   }
 
   private teardownOverlay(containerEl?: HTMLElement): void {
-    if (this.saveTimer !== null) { window.clearTimeout(this.saveTimer); this.saveTimer = null; }
     if (this.followFrame !== null) { window.cancelAnimationFrame(this.followFrame); this.followFrame = null; }
     this.sizeChangedAt = null;
     for (const entry of this.engines) {
@@ -648,14 +397,13 @@ export class NativePdfOverlayManager {
     this.pageStrokes = new Map();
     this.layout = null;
     this.drawFile = null;
+    this.toolbar?.teardown();
+    this.toolbar = null;
+    this.toolkit = null;
+    this.zoomReadout = null;
     this.overlay?.remove();
     this.overlay = null;
     if (containerEl) containerEl.classList.remove(NATIVE_ANNOTATING_CLS);
-    this.toolbar = null;
-    this.toolbarButtons = {};
-    this.colorDot = null;
-    this.zoomReadout = null;
-    this.closeSwatch();
   }
 
   collectDiagnostics(): Record<string, unknown> {
