@@ -1,14 +1,14 @@
 import { App, loadPdfJs, Notice, Platform, setIcon, TFile, Workspace, WorkspaceLeaf } from "obsidian";
-import { StrokeStore } from "../ink/StrokeStore";
-import { InkEngine } from "../ink/InkEngine";
-import { InkStroke, InkToolState } from "../ink/types";
-import { resolveInkCanvasBudget } from "../ink/inkBudget";
-import { PdfJsDocument, PdfJsLib } from "../views/annotationTypes";
-import { buildUniformPageLayout, computePageSizeFromPdf, LogicalPage, LogicalPageLayout, ScreenRect } from "./nativePdfGeometry";
-import { assignStrokeToPage, convertStrokesToLogical, convertStrokesToScreen, splitStrokesByPage } from "./overlayInkData";
-import { OverlayToolbar } from "../overlay/shared/OverlayToolbar";
-import { OverlayToolkit } from "../overlay/shared/OverlayToolkit";
-import { OverlayEngineEntry } from "../overlay/shared/types";
+import { StrokeStore } from "../../ink/StrokeStore";
+import { InkEngine } from "../../ink/InkEngine";
+import { InkStroke, InkToolState } from "../../ink/types";
+import { resolveInkCanvasBudget } from "../../ink/inkBudget";
+import { PdfJsDocument, PdfJsLib } from "../../views/annotationTypes";
+import { buildUniformPageLayout, computePageSizeFromPdf, LogicalPage, LogicalPageLayout, ScreenRect } from "../../pdf/nativePdfGeometry";
+import { assignStrokeToPage, convertStrokesToLogical, convertStrokesToScreen, splitStrokesByPage } from "../../pdf/overlayInkData";
+import { OverlayToolbar } from "../shared/OverlayToolbar";
+import { OverlayToolkit } from "../shared/OverlayToolkit";
+import { OverlayEngineEntry } from "../shared/types";
 
 export const NATIVE_PEN_BUTTON_CLS = "mobile-ink-pdf-toolbar-pen";
 export const NATIVE_OVERLAY_CLS = "mobile-ink-native-overlay";
@@ -16,7 +16,7 @@ export const NATIVE_OVERLAY_PAGE_CANVAS_CLS = "mobile-ink-native-page-canvas";
 export const NATIVE_ANNOTATING_CLS = "mobile-ink-native-annotating";
 const SETTLE_MS = 200;
 
-export class NativePdfOverlayManager {
+export class PdfOverlayAdapter {
   private penButton: HTMLElement | null = null;
   private currentLeaf: WorkspaceLeaf | null = null;
   private activeLeaf: WorkspaceLeaf | null = null;
