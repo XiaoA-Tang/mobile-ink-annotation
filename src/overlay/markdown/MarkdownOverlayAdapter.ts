@@ -120,7 +120,7 @@ export class MarkdownOverlayAdapter {
       attr: { "aria-label": "手写批注" }
     });
     setIcon(button, "pencil");
-    button.addEventListener("click", () => void this.toggle(leaf));
+    button.addEventListener("click", () => this.toggle(leaf));
     this.penButton = button;
   }
 
@@ -167,13 +167,12 @@ export class MarkdownOverlayAdapter {
     this.currentLeaf = null;
   }
 
-  private async toggle(leaf: WorkspaceLeaf): Promise<void> {
+  private toggle(leaf: WorkspaceLeaf): void {
     if (this.isActive && this.activeLeaf === leaf) {
-      await this.deactivate();
-      this.update();
+      this.setAnnotating(!this.annotating);
       return;
     }
-    await this.activate(leaf);
+    void this.activate(leaf);
   }
 
   private async activate(leaf: WorkspaceLeaf): Promise<void> {
@@ -218,7 +217,6 @@ export class MarkdownOverlayAdapter {
       getWidthAnchor: () => this.toolbar?.buttons.width ?? null
     });
     this.toolbar.build(this.overlay);
-    this.toolbar.setCollapsed(true);
 
     this.liveCanvas = document.createElement("canvas");
     this.committedCanvas = document.createElement("canvas");
@@ -244,7 +242,7 @@ export class MarkdownOverlayAdapter {
 
     this.measure();
     this.refreshStrokesForViewport();
-    this.setAnnotating(false);
+    this.setAnnotating(true);
 
     this.resizeObserver = new ResizeObserver(() => this.scheduleMeasure());
     this.resizeObserver.observe(preview);
@@ -329,10 +327,8 @@ export class MarkdownOverlayAdapter {
     }
     this.overlay?.classList.toggle(MARKDOWN_ANNOTATING_CLS, value);
     this.toolbar?.setCollapsed(!value);
+    if (this.penButton) this.penButton.classList.toggle("is-active", value);
     if (value && this.engine) this.engine.setInputEnabled(true);
-    if (!value) {
-      this.refreshStrokesForViewport();
-    }
   }
 
   private applyToolState(patch: Partial<InkToolState>): void {
