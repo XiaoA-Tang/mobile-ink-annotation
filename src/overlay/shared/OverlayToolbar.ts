@@ -8,6 +8,8 @@ export class OverlayToolbar {
   private buttonsMap: Record<string, HTMLElement> = {};
   private colorDot: HTMLElement | null = null;
   private swatchEl: HTMLElement | null = null;
+  private extraButtons: Array<{ spec: { icon: string; label: string; isActive(): boolean; onClick(): void }; el: HTMLElement | null }> = [];
+  private extraGroup: HTMLElement | null = null;
 
   constructor(private readonly host: ToolbarHost) {}
 
@@ -71,6 +73,8 @@ export class OverlayToolbar {
     addIconButton("undo", "undo-2", "撤销", () => { this.host.onUndo(); this.refresh(); }, historyGroup);
     addIconButton("redo", "redo-2", "重做", () => { this.host.onRedo(); this.refresh(); }, historyGroup);
 
+    for (const entry of this.extraButtons) this.mountExtraButton(entry);
+
     this.refresh();
   }
 
@@ -85,6 +89,33 @@ export class OverlayToolbar {
     if (this.colorDot) {
       this.colorDot.style.background = this.currentInkColor(state);
     }
+    for (const entry of this.extraButtons) {
+      if (entry.el) entry.el.classList.toggle("mobile-ink-active", entry.spec.isActive());
+    }
+  }
+
+  registerExtraButton(spec: { icon: string; label: string; isActive(): boolean; onClick(): void }): void {
+    this.extraButtons.push({ spec, el: null });
+    if (this.toolbarEl) this.mountExtraButton(this.extraButtons[this.extraButtons.length - 1]);
+    this.refresh();
+  }
+
+  private mountExtraButton(entry: { spec: { icon: string; label: string; isActive(): boolean; onClick(): void }; el: HTMLElement | null }): void {
+    if (!this.toolbarEl) return;
+    if (!this.extraGroup) {
+      this.extraGroup = this.toolbarEl.querySelector<HTMLElement>(".mobile-ink-toolbar-dock")?.createDiv({ cls: "mobile-ink-toolbar-group" }) ?? null;
+    }
+    if (!this.extraGroup) return;
+    const btn = this.extraGroup.createEl("button", {
+      cls: "mobile-ink-icon-button",
+      attr: { "aria-label": entry.spec.label }
+    });
+    setIcon(btn, entry.spec.icon);
+    btn.addEventListener("click", () => {
+      entry.spec.onClick();
+      this.refresh();
+    });
+    entry.el = btn;
   }
 
   teardown(): void {
@@ -93,6 +124,8 @@ export class OverlayToolbar {
     this.toolbarEl = null;
     this.buttonsMap = {};
     this.colorDot = null;
+    this.extraButtons = [];
+    this.extraGroup = null;
   }
 
   private currentInkColor(state: InkToolState): string {
