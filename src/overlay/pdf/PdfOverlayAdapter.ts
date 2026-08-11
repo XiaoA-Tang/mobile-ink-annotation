@@ -9,6 +9,7 @@ import { assignStrokeToPage, convertStrokesToLogical, convertStrokesToScreen, sp
 import { OverlayToolbar } from "../shared/OverlayToolbar";
 import { OverlayToolkit } from "../shared/OverlayToolkit";
 import { OverlayEngineEntry } from "../shared/types";
+import { PdfGestureLock } from "./PdfGestureLock";
 
 export const NATIVE_PEN_BUTTON_CLS = "mobile-ink-pdf-toolbar-pen";
 export const NATIVE_OVERLAY_CLS = "mobile-ink-native-overlay";
@@ -30,6 +31,9 @@ export class PdfOverlayAdapter {
   private toolbar: OverlayToolbar | null = null;
   private toolkit: OverlayToolkit | null = null;
   private zoomReadout: HTMLElement | null = null;
+  private panZoomLocked = false;
+  private gestureLock: PdfGestureLock | null = null;
+  private blockZoomButtons: ((block: boolean) => void) | null = null;
 
   private followFrame: number | null = null;
   private sizeChangedAt: number | null = null;
@@ -60,6 +64,8 @@ export class PdfOverlayAdapter {
     for (const ref of this.eventRefs) this.app.workspace.offref(ref);
     this.eventRefs = [];
     this.clearPenButtonRetry();
+    this.gestureLock?.destroy();
+    this.gestureLock = null;
     this.removePenButton();
     void this.deactivateOverlay();
   }
@@ -204,6 +210,29 @@ export class PdfOverlayAdapter {
         getWidthAnchor: () => this.toolbar?.buttons.width ?? null
       });
       this.toolbar.build(this.overlay);
+      const scrollEl = containerEl.querySelector<HTMLElement>(".pdf-container") ?? containerEl;
+      this.gestureLock = new PdfGestureLock(scrollEl);
+      this.toolbar.registerExtraButton({
+        icon: "lock",
+        label: "锁定缩放/平移（仅上下滚动）",
+        isActive: () => this.panZoomLocked,
+        onClick: () => {
+          this.panZoomLocked = !this.panZoomLocked;
+          this.gestureLock?.setLocked(this.panZoomLocked);
+          this.blockZoomButtons?.(this.panZoomLocked);
+        }
+      });
+      const blockZoomButtons = (block: boolean): void => {
+        const toolbar = containerEl.querySelector<HTMLElement>(".pdf-toolbar");
+        if (!toolbar) return;
+        toolbar.querySelectorAll<HTMLElement>("button").forEach((btn) => {
+          const label = (btn.getAttribute("aria-label") ?? btn.title ?? "").toLowerCase();
+          const isZoom = label.includes("zoom") || label.includes("缩放") || label.includes("放大") || label.includes("缩小");
+          btn.style.pointerEvents = block && isZoom ? "none" : "";
+        });
+      };
+      this.blockZoomButtons = blockZoomButtons;
+      this.blockZoomButtons(this.panZoomLocked);
       this.zoomReadout = this.overlay.createDiv({ cls: "mobile-ink-native-zoom-readout", text: "100%" });
 
       const pages = this.getVisiblePages(containerEl);
@@ -426,6 +455,11 @@ export class PdfOverlayAdapter {
   }
 
   private teardownOverlay(containerEl?: HTMLElement): void {
+    this.gestureLock?.destroy();
+    this.gestureLock = null;
+    this.panZoomLocked = false;
+    this.blockZoomButtons?.(false);
+    this.blockZoomButtons = null;
     if (this.followFrame !== null) { window.cancelAnimationFrame(this.followFrame); this.followFrame = null; }
     this.sizeChangedAt = null;
     for (const entry of this.engines) {
