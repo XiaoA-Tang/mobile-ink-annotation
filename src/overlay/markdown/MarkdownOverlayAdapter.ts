@@ -48,6 +48,11 @@ export class MarkdownOverlayAdapter {
   private resizeTimer: number | null = null;
   private resizeObserver: ResizeObserver | null = null;
 
+  private penButtonRetryTimer: number | null = null;
+  private penButtonRetryCount = 0;
+  private readonly penButtonRetryMs = 250;
+  private readonly penButtonRetryMax = 20;
+
   constructor(
     private readonly app: App,
     private readonly store: StrokeStore
@@ -89,13 +94,24 @@ export class MarkdownOverlayAdapter {
       this.removePenButton();
       return;
     }
+    if (!this.isReadingView(leaf)) {
+      this.removePenButton();
+      this.schedulePenButtonRetry(leaf);
+      return;
+    }
     if (leaf === this.currentLeaf && this.penButton) return;
     this.removePenButton();
     this.currentLeaf = leaf;
     this.attachPenButton(leaf);
+    if (!this.penButton) this.schedulePenButtonRetry(leaf);
+  }
+
+  private isReadingView(leaf: WorkspaceLeaf): boolean {
+    return !!leaf.view.containerEl.querySelector<HTMLElement>(".markdown-preview-view");
   }
 
   private attachPenButton(leaf: WorkspaceLeaf): void {
+    if (!this.isReadingView(leaf)) return;
     const headerEl = leaf.view.containerEl.querySelector<HTMLElement>(".view-header-actions")
       ?? leaf.view.containerEl.querySelector<HTMLElement>(".view-header");
     if (!headerEl) return;
@@ -108,7 +124,44 @@ export class MarkdownOverlayAdapter {
     this.penButton = button;
   }
 
+  private schedulePenButtonRetry(leaf: WorkspaceLeaf): void {
+    if (this.unloaded) return;
+    if (this.penButtonRetryTimer !== null) return;
+    this.penButtonRetryTimer = window.setTimeout(() => {
+      this.penButtonRetryTimer = null;
+      if (this.unloaded || this.isActive) return;
+      if (this.app.workspace.activeLeaf !== leaf) return;
+      if (this.penButton) return;
+      if (!this.isReadingView(leaf)) {
+        this.penButtonRetryCount += 1;
+        if (this.penButtonRetryCount < this.penButtonRetryMax) {
+          this.schedulePenButtonRetry(leaf);
+        }
+        return;
+      }
+      if (leaf !== this.currentLeaf) this.currentLeaf = leaf;
+      this.attachPenButton(leaf);
+      if (!this.penButton) {
+        this.penButtonRetryCount += 1;
+        if (this.penButtonRetryCount < this.penButtonRetryMax) {
+          this.schedulePenButtonRetry(leaf);
+        }
+      } else {
+        this.penButtonRetryCount = 0;
+      }
+    }, this.penButtonRetryMs);
+  }
+
+  private clearPenButtonRetry(): void {
+    if (this.penButtonRetryTimer !== null) {
+      window.clearTimeout(this.penButtonRetryTimer);
+      this.penButtonRetryTimer = null;
+    }
+    this.penButtonRetryCount = 0;
+  }
+
   private removePenButton(): void {
+    this.clearPenButtonRetry();
     this.penButton?.remove();
     this.penButton = null;
     this.currentLeaf = null;

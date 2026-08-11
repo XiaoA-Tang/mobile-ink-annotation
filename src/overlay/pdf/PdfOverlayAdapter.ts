@@ -37,6 +37,11 @@ export class PdfOverlayAdapter {
   private retryBlockedUntil = 0;
   private unloaded = false;
 
+  private penButtonRetryTimer: number | null = null;
+  private penButtonRetryCount = 0;
+  private readonly penButtonRetryMs = 250;
+  private readonly penButtonRetryMax = 20;
+
   constructor(
     private readonly app: App,
     private readonly store: StrokeStore
@@ -54,6 +59,7 @@ export class PdfOverlayAdapter {
     this.unloaded = true;
     for (const ref of this.eventRefs) this.app.workspace.offref(ref);
     this.eventRefs = [];
+    this.clearPenButtonRetry();
     this.removePenButton();
     void this.deactivateOverlay();
   }
@@ -82,6 +88,7 @@ export class PdfOverlayAdapter {
     this.removePenButton();
     this.currentLeaf = leaf;
     this.attachPenButton(leaf);
+    if (!this.penButton) this.schedulePenButtonRetry(leaf);
     void this.activateOverlay(leaf);
   }
 
@@ -101,7 +108,39 @@ export class PdfOverlayAdapter {
     this.penButton = button;
   }
 
+  private schedulePenButtonRetry(leaf: WorkspaceLeaf): void {
+    if (this.unloaded) return;
+    if (this.penButtonRetryTimer !== null) return;
+    this.penButtonRetryTimer = window.setTimeout(() => {
+      this.penButtonRetryTimer = null;
+      if (this.unloaded) return;
+      if (this.app.workspace.activeLeaf !== leaf) return;
+      if (this.penButton) return;
+      if (leaf !== this.currentLeaf) {
+        this.currentLeaf = leaf;
+      }
+      this.attachPenButton(leaf);
+      if (!this.penButton) {
+        this.penButtonRetryCount += 1;
+        if (this.penButtonRetryCount < this.penButtonRetryMax) {
+          this.schedulePenButtonRetry(leaf);
+        }
+      } else {
+        this.penButtonRetryCount = 0;
+      }
+    }, this.penButtonRetryMs);
+  }
+
+  private clearPenButtonRetry(): void {
+    if (this.penButtonRetryTimer !== null) {
+      window.clearTimeout(this.penButtonRetryTimer);
+      this.penButtonRetryTimer = null;
+    }
+    this.penButtonRetryCount = 0;
+  }
+
   private removePenButton(): void {
+    this.clearPenButtonRetry();
     this.penButton?.remove();
     this.penButton = null;
     this.currentLeaf = null;
