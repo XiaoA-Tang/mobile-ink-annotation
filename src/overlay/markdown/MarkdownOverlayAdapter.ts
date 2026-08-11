@@ -8,10 +8,8 @@ import { OverlayToolbar } from "../shared/OverlayToolbar";
 import { OverlayToolkit } from "../shared/OverlayToolkit";
 import {
   convertStrokesFromAnnotation,
-  fromViewportStrokeWithScroll,
   mdLoadScale,
-  reprojectStrokesToWidth,
-  toViewportStrokeWithScroll
+  reprojectStrokesToWidth
 } from "./markdownGeometry";
 
 export const MARKDOWN_TITLE_BUTTON_CLS = "mobile-ink-markdown-pen";
@@ -218,14 +216,17 @@ export class MarkdownOverlayAdapter {
     });
     this.toolbar.build(this.overlay);
 
+    if (getComputedStyle(preview).position === "static") preview.style.position = "relative";
     this.liveCanvas = document.createElement("canvas");
     this.committedCanvas = document.createElement("canvas");
     for (const c of [this.liveCanvas, this.committedCanvas]) {
       c.className = "mobile-ink-native-page-canvas";
-      c.style.position = "fixed";
-      c.style.zIndex = "3";
+      c.style.position = "absolute";
+      c.style.top = "0";
+      c.style.left = "0";
       c.style.touchAction = "none";
-      this.overlay.append(c);
+      c.style.zIndex = "3";
+      preview.append(c);
     }
 
     // 关键：InkEngine 的“注解根”必须包含 canvas（isNodeInsideAnnotation/手势拦截都基于它），
@@ -246,53 +247,25 @@ export class MarkdownOverlayAdapter {
 
     this.resizeObserver = new ResizeObserver(() => this.scheduleMeasure());
     this.resizeObserver.observe(preview);
-    preview.addEventListener("scroll", this.onScroll, { passive: true });
-
-    this.followFrame = window.requestAnimationFrame(() => this.refreshStrokesForViewport());
     if (this.penButton) this.penButton.classList.add("is-active");
-  }
-
-  private onScroll = (): void => {
-    if (this.followFrame !== null) return;
-    this.followFrame = window.requestAnimationFrame(() => {
-      this.followFrame = null;
-      if (!this.isActive || !this.engine) return;
-      this.armCanvasPosition();
-      if (!this.annotating) this.refreshStrokesForViewport();
-    });
-  };
-
-  private armCanvasPosition(): void {
-    if (!this.preview || !this.liveCanvas || !this.committedCanvas) return;
-    const r = this.preview.getBoundingClientRect();
-    const left = Math.round(r.left - (this.preview.scrollLeft || 0));
-    const top = Math.round(r.top - (this.preview.scrollTop || 0));
-    for (const c of [this.liveCanvas, this.committedCanvas]) {
-      c.style.left = `${left}px`;
-      c.style.top = `${top}px`;
-    }
   }
 
   private measure(): void {
     if (!this.preview) return;
-    const w = Math.max(1, Math.round(this.preview.clientWidth));
-    const h = Math.max(1, Math.round(this.preview.clientHeight || window.innerHeight));
+    const w = Math.max(1, Math.round(this.preview.scrollWidth));
+    const h = Math.max(1, Math.round(this.preview.scrollHeight));
     for (const c of [this.liveCanvas, this.committedCanvas]) {
       if (!c) continue;
       c.style.width = `${w}px`;
       c.style.height = `${h}px`;
     }
-    this.armCanvasPosition();
     this.engine?.resize(w, h);
     this.engine?.setDisplayScale(1);
   }
 
   private refreshStrokesForViewport(): void {
-    if (!this.engine || !this.preview) return;
-    const scrollTop = Math.max(0, this.preview.scrollTop || 0);
-    const scrollLeft = Math.max(0, this.preview.scrollLeft || 0);
-    const cropped = this.strokes.map((s) => toViewportStrokeWithScroll(s, scrollTop, scrollLeft));
-    this.engine.loadStrokes(cropped);
+    if (!this.engine) return;
+    this.engine.loadStrokes(this.strokes);
   }
 
   private scheduleMeasure(): void {
@@ -340,34 +313,25 @@ export class MarkdownOverlayAdapter {
     const file = this.drawFile;
     if (!(file instanceof TFile) || !this.engine || !this.preview) return;
     this.engine.flushPendingStrokes();
-    const scrollTop = Math.max(0, this.preview.scrollTop || 0);
-    const scrollLeft = Math.max(0, this.preview.scrollLeft || 0);
-    const viewportStrokes = this.engine.getStrokes();
-    const logical: InkStroke[] = this.strokes.map((s) => s);
+    const engineStrokes = this.engine.getStrokes();
+    const logical = this.strokes.map((s) => s);
     const written = new Set<string>();
-    for (const s of viewportStrokes) {
-      const page = fromViewportStrokeWithScroll(s, scrollTop, scrollLeft);
+    for (const s of engineStrokes) {
       const idx = logical.findIndex((st) => st.id === s.id);
       if (idx >= 0) {
-        logical[idx] = page;
+        logical[idx] = s;
         written.add(s.id);
       } else {
-        logical.push(page);
+        logical.push(s);
         written.add(s.id);
       }
     }
     this.strokes = logical.filter((s) => written.has(s.id));
-
     const annotation = await this.store.load(file.path, this.pageWidth, this.pageHeight);
     annotation.pageWidth = this.pageWidth;
     annotation.pageHeight = this.pageHeight;
     annotation.strokes = this.strokes.filter((s) => s.points.length > 0);
     await this.store.save(annotation);
-    this.updateAnnotationPageSize(annotation.pageHeight);
-  }
-
-  private updateAnnotationPageSize(_pageHeight: number): void {
-    // 保留钩子：后续如需把 pageHeight 写回本类字段可在此扩展。
   }
 
   private async deactivate(): Promise<void> {
@@ -388,7 +352,6 @@ export class MarkdownOverlayAdapter {
   private teardown(_containerEl?: HTMLElement | null): void {
     if (this.followFrame !== null) { window.cancelAnimationFrame(this.followFrame); this.followFrame = null; }
     if (this.resizeTimer !== null) { window.clearTimeout(this.resizeTimer); this.resizeTimer = null; }
-    this.preview?.removeEventListener("scroll", this.onScroll);
     this.preview = null;
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
