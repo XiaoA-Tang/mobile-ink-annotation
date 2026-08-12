@@ -2731,9 +2731,23 @@ input.mobile-ink-pdf-page-input {
   -webkit-user-select: none;
 }
 
-/* 顶栏笔按钮显隐底部工具条 */
-.mobile-ink-native-toolbar.is-collapsed {
+/* 底部悬浮栏收起态：仅显示单铅笔按钮，dock 隐藏 */
+.mobile-ink-native-toolbar .mobile-ink-collapsed-pen {
   display: none;
+}
+
+.mobile-ink-native-toolbar.is-collapsed .mobile-ink-toolbar-dock {
+  display: none;
+}
+
+.mobile-ink-native-toolbar.is-collapsed .mobile-ink-collapsed-pen {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  flex-basis: 44px;
+  border-radius: 999px;
 }
 
 .mobile-ink-markdown-overlay {
