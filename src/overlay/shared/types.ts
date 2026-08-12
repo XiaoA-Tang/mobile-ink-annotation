@@ -22,6 +22,8 @@ export type ToolbarHost = {
   onRedo(): void;
   getOverlay(): HTMLElement | null;
   getWidthAnchor(): HTMLElement | null;
+  onPenExpand?(): void;
+  onCollapse?(): void;
 };
 
 export type OverlayHost = {
