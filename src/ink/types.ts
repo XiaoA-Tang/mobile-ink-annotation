@@ -168,6 +168,7 @@ export type InkEngineOptions = {
   };
   recoverPointerOnMove?: boolean;
   panOutsideCanvas?: boolean;
+  widthScale?: number;
 };
 
 export type InkDebugEvent = {

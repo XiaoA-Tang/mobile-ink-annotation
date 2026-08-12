@@ -17,6 +17,12 @@ export const NATIVE_OVERLAY_PAGE_CANVAS_CLS = "mobile-ink-native-page-canvas";
 export const NATIVE_ANNOTATING_CLS = "mobile-ink-native-annotating";
 const SETTLE_MS = 200;
 
+function computeWidthScale(page: LogicalPage, rect: ScreenRect): number {
+  const scaleX = rect.width / Math.max(1, page.width);
+  const scaleY = rect.height / Math.max(1, page.height);
+  return Math.max(0.05, Math.sqrt(scaleX * scaleY));
+}
+
 export class PdfOverlayAdapter {
   private penButton: HTMLElement | null = null;
   private currentLeaf: WorkspaceLeaf | null = null;
@@ -49,6 +55,8 @@ export class PdfOverlayAdapter {
   private lastWinHeight = window.innerHeight;
   private trackingDirty = true;
   private confirmRescanTimer: number | null = null;
+  private lastPageResizeScan = 0;
+  private static readonly PAGE_RESIZE_THROTTLE_MS = 100;
 
   private penButtonRetryTimer: number | null = null;
   private penButtonRetryCount = 0;
@@ -402,14 +410,36 @@ export class PdfOverlayAdapter {
     const vh = window.innerHeight;
     const candidates = containerEl.querySelectorAll<HTMLElement>(".page");
     const pages: Array<{ el: HTMLElement; pageNumber: number; rect: ScreenRect }> = [];
-    candidates.forEach((el) => {
+    const count = candidates.length;
+    if (count === 0) return pages;
+
+    const scrollEl = this.trackScrollEl;
+    const scrollTop = scrollEl?.scrollTop ?? 0;
+    const clientHeight = Math.max(1, scrollEl?.clientHeight ?? vh);
+
+    let pageHeight = 0;
+    if (count > 1) {
+      const firstTop = candidates[0].offsetTop;
+      const secondTop = candidates[1].offsetTop;
+      if (secondTop > firstTop) pageHeight = secondTop - firstTop;
+    }
+    if (pageHeight <= 0) {
+      const measured = this.engines[0]?.rect.height ?? 0;
+      pageHeight = measured > 0 ? measured : Math.max(1, this.layout?.pages[0]?.height ?? 1);
+    }
+
+    const startPage = Math.max(0, Math.floor(scrollTop / pageHeight) - 1);
+    const endPage = Math.min(count - 1, Math.ceil((scrollTop + clientHeight) / pageHeight) + 1);
+
+    for (let i = startPage; i <= endPage; i++) {
+      const el = candidates[i];
       const rect = el.getBoundingClientRect();
-      if (rect.bottom < 0 || rect.top > vh || rect.right < 0 || rect.left > vw) return;
+      if (rect.bottom < 0 || rect.top > vh || rect.right < 0 || rect.left > vw) continue;
       const fromAttr = Number(el.getAttribute("data-page-number")) || Number(el.dataset.pageNumber);
       const pageNumber = Number.isFinite(fromAttr) && fromAttr > 0 ? fromAttr : 0;
-      if (pageNumber < 1) return;
+      if (pageNumber < 1) continue;
       pages.push({ el, pageNumber, rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height } });
-    });
+    }
     return pages;
   }
 
@@ -437,6 +467,7 @@ export class PdfOverlayAdapter {
       canvasMaxDpr: 3,
       canvasMaxPixels: resolveInkCanvasBudget(Platform.isMobile),
       panOutsideCanvas: false,
+      widthScale: computeWidthScale(page, rect),
       onInputStart: () => this.toolkit!.markDirty(),
       onChange: () => this.toolkit!.markDirty()
     });
@@ -453,8 +484,11 @@ export class PdfOverlayAdapter {
     let pageResizeObserver: ResizeObserver | null = null;
     if (typeof ResizeObserver !== "undefined") {
       pageResizeObserver = new ResizeObserver(() => {
+        const now = performance.now();
+        if (now - this.lastPageResizeScan < PdfOverlayAdapter.PAGE_RESIZE_THROTTLE_MS) return;
+        this.lastPageResizeScan = now;
         this.trackingDirty = true;
-        this.sizeChangedAt = performance.now();
+        this.sizeChangedAt = now;
       });
       pageResizeObserver.observe(pageEl);
     }
@@ -504,6 +538,7 @@ export class PdfOverlayAdapter {
     const logical = this.pageStrokes.get(entry.page.pageNumber) ?? [];
     entry.engine.resize(width, height);
     entry.engine.setDisplayScale(1);
+    entry.engine.setWidthScale(computeWidthScale(entry.page, rect));
     entry.engine.loadStrokes(convertStrokesToScreen(logical, entry.page, rect));
     for (const c of [entry.live, entry.committed]) {
       c.style.width = "100%";

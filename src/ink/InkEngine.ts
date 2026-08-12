@@ -66,6 +66,7 @@ export class InkEngine {
   private eraserChanged = false;
   private inputEnabled = true;
   private displayScale = 1;
+  private widthScale = 1;
   private toolState: InkToolState = { ...DEFAULT_TOOL_STATE };
   private activeSmoothCount = 0;
   private canvasRectCache: CanvasRectCache | null = null;
@@ -77,6 +78,7 @@ export class InkEngine {
     private readonly options: InkEngineOptions
   ) {
     this.toolState = { ...DEFAULT_TOOL_STATE, ...options.initialToolState };
+    this.widthScale = Math.max(0.05, Number.isFinite(options.widthScale) && options.widthScale && options.widthScale > 0 ? options.widthScale : 1);
     this.committedCtx = this.setupInkCanvas(committedCanvas, this.displayScale, false);
     this.liveCtx = this.setupInkCanvas(liveCanvas, this.displayScale, true);
     this.bindEvents();
@@ -103,6 +105,10 @@ export class InkEngine {
     this.liveCanvasDirty = true;
     this.renderCommittedNow();
     this.renderLiveNow();
+  }
+
+  setWidthScale(scale: number): void {
+    this.widthScale = Math.max(0.05, Number.isFinite(scale) && scale > 0 ? scale : 1);
   }
 
   destroy(): void {
@@ -813,11 +819,12 @@ export class InkEngine {
   }
 
   private createStroke(): InkStroke {
+    const base = this.toolState.tool === "highlighter" ? this.toolState.highlighterWidth : this.toolState.width;
     return {
       id: crypto.randomUUID(),
       tool: this.toolState.tool === "highlighter" ? "highlighter" : "pen",
       color: this.toolState.tool === "highlighter" ? this.toolState.highlighterColor : this.toolState.color,
-      width: this.toolState.tool === "highlighter" ? this.toolState.highlighterWidth : this.toolState.width,
+      width: Math.max(0.5, base * this.widthScale),
       points: []
     };
   }
