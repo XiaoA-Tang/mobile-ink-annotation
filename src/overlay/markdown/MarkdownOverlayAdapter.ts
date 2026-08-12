@@ -1,4 +1,4 @@
-import { App, Platform, setIcon, TFile, Workspace, WorkspaceLeaf } from "obsidian";
+import { App, Platform, TFile, Workspace, WorkspaceLeaf } from "obsidian";
 import { StrokeStore } from "../../ink/StrokeStore";
 import { InkEngine } from "../../ink/InkEngine";
 import { InkStroke, InkToolState } from "../../ink/types";
@@ -12,7 +12,6 @@ import {
   reprojectStrokesToWidth
 } from "./markdownGeometry";
 
-export const MARKDOWN_TITLE_BUTTON_CLS = "mobile-ink-markdown-pen";
 export const MARKDOWN_OVERLAY_CLS = "mobile-ink-markdown-overlay";
 export const MARKDOWN_ANNOTATING_CLS = "mobile-ink-markdown-annotating";
 
@@ -23,12 +22,10 @@ export class MarkdownOverlayAdapter {
   private teardownToken = 0;
   private eventRefs: ReturnType<Workspace["on"]>[] = [];
 
-  private currentLeaf: WorkspaceLeaf | null = null;
   private activeLeaf: WorkspaceLeaf | null = null;
   private containerEl: HTMLElement | null = null;
   private drawFile: TFile | null = null;
 
-  private penButton: HTMLElement | null = null;
   private overlay: HTMLElement | null = null;
   private liveCanvas: HTMLCanvasElement | null = null;
   private committedCanvas: HTMLCanvasElement | null = null;
@@ -45,11 +42,6 @@ export class MarkdownOverlayAdapter {
   private followFrame: number | null = null;
   private resizeTimer: number | null = null;
   private resizeObserver: ResizeObserver | null = null;
-
-  private penButtonRetryTimer: number | null = null;
-  private penButtonRetryCount = 0;
-  private readonly penButtonRetryMs = 250;
-  private readonly penButtonRetryMax = 20;
 
   constructor(
     private readonly app: App,
@@ -68,12 +60,43 @@ export class MarkdownOverlayAdapter {
     this.unloaded = true;
     for (const ref of this.eventRefs) this.app.workspace.offref(ref);
     this.eventRefs = [];
-    this.removePenButton();
     void this.deactivate();
   }
 
   private get isActive(): boolean {
     return this.activeLeaf !== null;
+  }
+
+  private ensureBuilt(leaf: WorkspaceLeaf): boolean {
+    if (this.overlay && this.toolbar && this.toolkit) return true;
+    const preview = leaf.view.containerEl.querySelector<HTMLElement>(".markdown-preview-view");
+    if (!preview) return false;
+    this.containerEl = leaf.view.containerEl;
+    this.overlay = this.containerEl.createDiv({ cls: `${MARKDOWN_OVERLAY_CLS} mobile-ink-native-overlay`, attr: { "aria-hidden": "true" } });
+    this.toolkit = new OverlayToolkit(
+      { app: this.app, store: this.store },
+      () => this.saveAnnotation()
+    );
+    this.toolbar = new OverlayToolbar({
+      getToolState: () => this.toolkit!.toolState,
+      applyToolState: (patch) => this.applyToolState(patch),
+      onUndo: () => { this.engine?.undo(); this.toolbar?.refresh(); this.toolkit?.markDirty(); },
+      onRedo: () => { this.engine?.redo(); this.toolbar?.refresh(); this.toolkit?.markDirty(); },
+      getOverlay: () => this.overlay,
+      getWidthAnchor: () => this.toolbar?.buttons.width ?? null,
+      onPenExpand: () => {
+        if (this.isActive) {
+          this.setAnnotating(true);
+          return;
+        }
+        const leaf = this.app.workspace.activeLeaf;
+        if (leaf) void this.activate(leaf);
+      },
+      onCollapse: () => this.setAnnotating(false)
+    });
+    this.toolbar.build(this.overlay);
+    this.toolbar.setCollapsed(true);
+    return true;
   }
 
   private update(): void {
@@ -89,88 +112,18 @@ export class MarkdownOverlayAdapter {
     }
     const isMd = !!leaf && leaf.getViewState().type === "markdown";
     if (!isMd || !leaf) {
-      this.removePenButton();
+      if (this.toolbar) void this.deactivate();
       return;
     }
     if (!this.isReadingView(leaf)) {
-      this.removePenButton();
-      this.schedulePenButtonRetry(leaf);
+      if (this.toolbar) void this.deactivate();
       return;
     }
-    if (leaf === this.currentLeaf && this.penButton) return;
-    this.removePenButton();
-    this.currentLeaf = leaf;
-    this.attachPenButton(leaf);
-    if (!this.penButton) this.schedulePenButtonRetry(leaf);
+    this.ensureBuilt(leaf);
   }
 
   private isReadingView(leaf: WorkspaceLeaf): boolean {
     return !!leaf.view.containerEl.querySelector<HTMLElement>(".markdown-preview-view");
-  }
-
-  private attachPenButton(leaf: WorkspaceLeaf): void {
-    if (!this.isReadingView(leaf)) return;
-    const headerEl = leaf.view.containerEl.querySelector<HTMLElement>(".view-header-actions")
-      ?? leaf.view.containerEl.querySelector<HTMLElement>(".view-header");
-    if (!headerEl) return;
-    const button = headerEl.createEl("button", {
-      cls: `clickable-icon ${MARKDOWN_TITLE_BUTTON_CLS}`,
-      attr: { "aria-label": "手写批注" }
-    });
-    setIcon(button, "pencil");
-    button.addEventListener("click", () => this.toggle(leaf));
-    this.penButton = button;
-  }
-
-  private schedulePenButtonRetry(leaf: WorkspaceLeaf): void {
-    if (this.unloaded) return;
-    if (this.penButtonRetryTimer !== null) return;
-    this.penButtonRetryTimer = window.setTimeout(() => {
-      this.penButtonRetryTimer = null;
-      if (this.unloaded || this.isActive) return;
-      if (this.app.workspace.activeLeaf !== leaf) return;
-      if (this.penButton) return;
-      if (!this.isReadingView(leaf)) {
-        this.penButtonRetryCount += 1;
-        if (this.penButtonRetryCount < this.penButtonRetryMax) {
-          this.schedulePenButtonRetry(leaf);
-        }
-        return;
-      }
-      if (leaf !== this.currentLeaf) this.currentLeaf = leaf;
-      this.attachPenButton(leaf);
-      if (!this.penButton) {
-        this.penButtonRetryCount += 1;
-        if (this.penButtonRetryCount < this.penButtonRetryMax) {
-          this.schedulePenButtonRetry(leaf);
-        }
-      } else {
-        this.penButtonRetryCount = 0;
-      }
-    }, this.penButtonRetryMs);
-  }
-
-  private clearPenButtonRetry(): void {
-    if (this.penButtonRetryTimer !== null) {
-      window.clearTimeout(this.penButtonRetryTimer);
-      this.penButtonRetryTimer = null;
-    }
-    this.penButtonRetryCount = 0;
-  }
-
-  private removePenButton(): void {
-    this.clearPenButtonRetry();
-    this.penButton?.remove();
-    this.penButton = null;
-    this.currentLeaf = null;
-  }
-
-  private toggle(leaf: WorkspaceLeaf): void {
-    if (this.isActive && this.activeLeaf === leaf) {
-      this.setAnnotating(!this.annotating);
-      return;
-    }
-    void this.activate(leaf);
   }
 
   private async activate(leaf: WorkspaceLeaf): Promise<void> {
@@ -188,6 +141,11 @@ export class MarkdownOverlayAdapter {
       this.drawFile = null;
       return;
     }
+    if (!this.ensureBuilt(leaf)) {
+      this.activeLeaf = null;
+      this.drawFile = null;
+      return;
+    }
     this.preview = preview;
     await waitForImages(preview);
     if (token !== this.teardownToken || this.unloaded) return;
@@ -199,22 +157,6 @@ export class MarkdownOverlayAdapter {
     if (token !== this.teardownToken || this.unloaded) return;
     const scale = mdLoadScale(annotation, this.pageWidth);
     this.strokes = convertStrokesFromAnnotation(annotation.strokes, scale);
-
-    this.overlay = this.containerEl.createDiv({ cls: `${MARKDOWN_OVERLAY_CLS} mobile-ink-native-overlay`, attr: { "aria-hidden": "true" } });
-
-    this.toolkit = new OverlayToolkit(
-      { app: this.app, store: this.store },
-      () => this.saveAnnotation()
-    );
-    this.toolbar = new OverlayToolbar({
-      getToolState: () => this.toolkit!.toolState,
-      applyToolState: (patch) => this.applyToolState(patch),
-      onUndo: () => { this.engine?.undo(); this.toolbar?.refresh(); this.toolkit?.markDirty(); },
-      onRedo: () => { this.engine?.redo(); this.toolbar?.refresh(); this.toolkit?.markDirty(); },
-      getOverlay: () => this.overlay,
-      getWidthAnchor: () => this.toolbar?.buttons.width ?? null
-    });
-    this.toolbar.build(this.overlay);
 
     if (getComputedStyle(preview).position === "static") preview.style.position = "relative";
     this.liveCanvas = document.createElement("canvas");
@@ -232,14 +174,14 @@ export class MarkdownOverlayAdapter {
     // 关键：InkEngine 的“注解根”必须包含 canvas（isNodeInsideAnnotation/手势拦截都基于它），
     // 必须传 containerEl 而非滚动容器，否则所有指针事件会被判定为“注解区域外”而忽略。
     this.engine = new InkEngine(this.liveCanvas, this.committedCanvas, this.containerEl, {
-      initialToolState: { ...this.toolkit.toolState },
+      initialToolState: { ...this.toolkit!.toolState },
       canvasMaxDpr: 3,
       canvasMaxPixels: resolveInkCanvasBudget(Platform.isMobile),
       panOutsideCanvas: false,
       onInputStart: () => this.toolkit!.markDirty(),
       onChange: () => this.toolkit!.markDirty()
     });
-    this.toolkit.setActiveEngines([this.engine]);
+    this.toolkit!.setActiveEngines([this.engine]);
 
     this.measure();
     this.refreshStrokesForViewport();
@@ -247,7 +189,6 @@ export class MarkdownOverlayAdapter {
 
     this.resizeObserver = new ResizeObserver(() => this.scheduleMeasure());
     this.resizeObserver.observe(preview);
-    if (this.penButton) this.penButton.classList.add("is-active");
   }
 
   private measure(): void {
@@ -300,7 +241,6 @@ export class MarkdownOverlayAdapter {
     }
     this.overlay?.classList.toggle(MARKDOWN_ANNOTATING_CLS, value);
     this.toolbar?.setCollapsed(!value);
-    if (this.penButton) this.penButton.classList.toggle("is-active", value);
     if (value && this.engine) this.engine.setInputEnabled(true);
   }
 
@@ -368,7 +308,6 @@ export class MarkdownOverlayAdapter {
     this.strokes = [];
     this.annotating = false;
     this.drawFile = null;
-    if (this.penButton) this.penButton.classList.remove("is-active");
   }
 
   collectDiagnostics(): Record<string, unknown> {
