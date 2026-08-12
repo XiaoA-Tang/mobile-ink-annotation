@@ -1,4 +1,4 @@
-import { App, loadPdfJs, Notice, Platform, setIcon, TFile, Workspace, WorkspaceLeaf } from "obsidian";
+import { App, loadPdfJs, Notice, Platform, TFile, Workspace, WorkspaceLeaf } from "obsidian";
 import { StrokeStore } from "../../ink/StrokeStore";
 import { InkEngine } from "../../ink/InkEngine";
 import { InkStroke, InkToolState } from "../../ink/types";
@@ -11,7 +11,6 @@ import { OverlayToolkit } from "../shared/OverlayToolkit";
 import { OverlayEngineEntry } from "../shared/types";
 import { PdfGestureLock } from "./PdfGestureLock";
 
-export const NATIVE_PEN_BUTTON_CLS = "mobile-ink-pdf-toolbar-pen";
 export const NATIVE_OVERLAY_CLS = "mobile-ink-native-overlay";
 export const NATIVE_OVERLAY_PAGE_CANVAS_CLS = "mobile-ink-native-page-canvas";
 export const NATIVE_ANNOTATING_CLS = "mobile-ink-native-annotating";
@@ -24,8 +23,6 @@ function computeWidthScale(page: LogicalPage, rect: ScreenRect): number {
 }
 
 export class PdfOverlayAdapter {
-  private penButton: HTMLElement | null = null;
-  private currentLeaf: WorkspaceLeaf | null = null;
   private activeLeaf: WorkspaceLeaf | null = null;
   private eventRefs: ReturnType<Workspace["on"]>[] = [];
 
@@ -58,11 +55,6 @@ export class PdfOverlayAdapter {
   private lastPageResizeScan = 0;
   private static readonly PAGE_RESIZE_THROTTLE_MS = 100;
 
-  private penButtonRetryTimer: number | null = null;
-  private penButtonRetryCount = 0;
-  private readonly penButtonRetryMs = 250;
-  private readonly penButtonRetryMax = 20;
-
   constructor(
     private readonly app: App,
     private readonly store: StrokeStore
@@ -80,10 +72,8 @@ export class PdfOverlayAdapter {
     this.unloaded = true;
     for (const ref of this.eventRefs) this.app.workspace.offref(ref);
     this.eventRefs = [];
-    this.clearPenButtonRetry();
     this.gestureLock?.destroy();
     this.gestureLock = null;
-    this.removePenButton();
     void this.deactivateOverlay();
   }
 
@@ -103,75 +93,8 @@ export class PdfOverlayAdapter {
       return;
     }
     const isPdf = !!leaf && leaf.getViewState().type === "pdf";
-    if (!isPdf || !leaf) {
-      this.removePenButton();
-      return;
-    }
-    if (leaf === this.currentLeaf && this.penButton) return;
-    this.removePenButton();
-    this.currentLeaf = leaf;
-    this.attachPenButton(leaf);
-    if (!this.penButton) this.schedulePenButtonRetry(leaf);
+    if (!isPdf || !leaf) return;
     void this.activateOverlay(leaf);
-  }
-
-  private getPdfToolbar(containerEl: HTMLElement): HTMLElement | null {
-    return containerEl.querySelector<HTMLElement>(".pdf-toolbar");
-  }
-
-  private attachPenButton(leaf: WorkspaceLeaf): void {
-    const toolbar = this.getPdfToolbar(leaf.view.containerEl);
-    if (!toolbar) return;
-    const button = toolbar.createEl("button", {
-      cls: `clickable-icon ${NATIVE_PEN_BUTTON_CLS}`,
-      attr: { "aria-label": "显示/隐藏批注工具条" }
-    });
-    setIcon(button, "pencil");
-    button.addEventListener("click", () => this.toggleToolbar());
-    this.penButton = button;
-  }
-
-  private schedulePenButtonRetry(leaf: WorkspaceLeaf): void {
-    if (this.unloaded) return;
-    if (this.penButtonRetryTimer !== null) return;
-    this.penButtonRetryTimer = window.setTimeout(() => {
-      this.penButtonRetryTimer = null;
-      if (this.unloaded) return;
-      if (this.app.workspace.activeLeaf !== leaf) return;
-      if (this.penButton) return;
-      if (leaf !== this.currentLeaf) {
-        this.currentLeaf = leaf;
-      }
-      this.attachPenButton(leaf);
-      if (!this.penButton) {
-        this.penButtonRetryCount += 1;
-        if (this.penButtonRetryCount < this.penButtonRetryMax) {
-          this.schedulePenButtonRetry(leaf);
-        }
-      } else {
-        this.penButtonRetryCount = 0;
-      }
-    }, this.penButtonRetryMs);
-  }
-
-  private clearPenButtonRetry(): void {
-    if (this.penButtonRetryTimer !== null) {
-      window.clearTimeout(this.penButtonRetryTimer);
-      this.penButtonRetryTimer = null;
-    }
-    this.penButtonRetryCount = 0;
-  }
-
-  private removePenButton(): void {
-    this.clearPenButtonRetry();
-    this.penButton?.remove();
-    this.penButton = null;
-    this.currentLeaf = null;
-  }
-
-  private toggleToolbar(): void {
-    if (!this.toolbar) return;
-    this.toolbar.setCollapsed(!this.toolbar.isCollapsed());
   }
 
   private resolveScrollContainer(containerEl: HTMLElement): HTMLElement {
@@ -239,6 +162,7 @@ export class PdfOverlayAdapter {
         getWidthAnchor: () => this.toolbar?.buttons.width ?? null
       });
       this.toolbar.build(this.overlay);
+      this.toolbar.setCollapsed(true);
       const scrollEl = this.resolveScrollContainer(containerEl);
       this.trackScrollEl = scrollEl;
       this.lastScrollLeft = scrollEl.scrollLeft;
@@ -290,7 +214,6 @@ export class PdfOverlayAdapter {
         this.activeLeaf = null;
         this.teardownOverlay(containerEl);
         this.retryBlockedUntil = performance.now() + 3000;
-        this.removePenButton();
         this.update();
       }
     }
@@ -580,9 +503,6 @@ export class PdfOverlayAdapter {
     await this.toolkit?.flush();
     if (token !== this.teardownToken) return;
     this.teardownOverlay(containerEl);
-    if (leaf) {
-      this.currentLeaf = null;
-    }
     this.update();
   }
 
