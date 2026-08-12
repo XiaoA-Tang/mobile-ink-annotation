@@ -166,6 +166,18 @@ export class PdfOverlayAdapter {
     this.toolbar.setCollapsed(!this.toolbar.isCollapsed());
   }
 
+  private resolveScrollContainer(containerEl: HTMLElement): HTMLElement {
+    const viewer = containerEl.querySelector<HTMLElement>(".pdf-viewer-container")
+      ?? containerEl.querySelector<HTMLElement>(".pdf-container");
+    if (viewer) return viewer;
+    const scrollable: HTMLElement | null = Array.from(containerEl.querySelectorAll<HTMLElement>("*")).find((el) => {
+      const s = getComputedStyle(el);
+      return (s.overflowY === "auto" || s.overflowY === "scroll")
+        && el.scrollHeight > el.clientHeight;
+    }) ?? null;
+    return scrollable ?? containerEl;
+  }
+
   private async activateOverlay(leaf: WorkspaceLeaf): Promise<void> {
     if (this.isActive) return;
     if (performance.now() < this.retryBlockedUntil) return;
@@ -219,7 +231,7 @@ export class PdfOverlayAdapter {
         getWidthAnchor: () => this.toolbar?.buttons.width ?? null
       });
       this.toolbar.build(this.overlay);
-      const scrollEl = containerEl.querySelector<HTMLElement>(".pdf-container") ?? containerEl;
+      const scrollEl = this.resolveScrollContainer(containerEl);
       this.trackScrollEl = scrollEl;
       this.lastScrollLeft = scrollEl.scrollLeft;
       this.lastScrollTop = scrollEl.scrollTop;
@@ -326,6 +338,7 @@ export class PdfOverlayAdapter {
       entry.engine.setInputEnabled(false);
       this.replacePageStrokes(entry.page.pageNumber);
       entry.engine.destroy();
+      entry.pageResizeObserver?.disconnect();
       entry.live.remove();
       entry.committed.remove();
       this.engines.splice(this.engines.indexOf(entry), 1);
@@ -437,7 +450,16 @@ export class PdfOverlayAdapter {
     const logicalStrokes = this.pageStrokes.get(page.pageNumber) ?? [];
     engine.loadStrokes(convertStrokesToScreen(logicalStrokes, page, rect));
 
-    this.engines.push({ engine, page, rect, basisRect: { ...rect }, live, committed, pageEl });
+    let pageResizeObserver: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined") {
+      pageResizeObserver = new ResizeObserver(() => {
+        this.trackingDirty = true;
+        this.sizeChangedAt = performance.now();
+      });
+      pageResizeObserver.observe(pageEl);
+    }
+
+    this.engines.push({ engine, page, rect, basisRect: { ...rect }, live, committed, pageEl, pageResizeObserver });
   }
 
   private replacePageStrokes(pageNumber: number): void {
@@ -459,6 +481,7 @@ export class PdfOverlayAdapter {
       const match = byPage.get(entry.pageEl);
       if (!match) {
         entry.engine.destroy();
+        entry.pageResizeObserver?.disconnect();
         entry.live.remove();
         entry.committed.remove();
         this.engines.splice(this.engines.indexOf(entry), 1);
@@ -545,6 +568,7 @@ export class PdfOverlayAdapter {
     this.sizeChangedAt = null;
     for (const entry of this.engines) {
       entry.engine.setInputEnabled(false);
+      entry.pageResizeObserver?.disconnect();
       entry.engine.destroy();
     }
     this.engines = [];
@@ -587,6 +611,18 @@ export class PdfOverlayAdapter {
         ? { pageWidth: Math.round(layout.pageWidth), pageHeight: Math.round(layout.pageHeight), pages: layout.pages.length }
         : null,
       zoomReadout: this.zoomReadout?.textContent ?? null,
+      trackScrollEl: this.trackScrollEl
+        ? {
+            tag: this.trackScrollEl.tagName.toLowerCase(),
+            className: this.trackScrollEl.className ?? "",
+            scrollWidth: this.trackScrollEl.scrollWidth,
+            scrollHeight: this.trackScrollEl.scrollHeight,
+            clientWidth: this.trackScrollEl.clientWidth,
+            clientHeight: this.trackScrollEl.clientHeight,
+            scrollLeft: this.trackScrollEl.scrollLeft,
+            scrollTop: this.trackScrollEl.scrollTop
+          }
+        : null,
       engineCount: this.engines.length,
       pages
     };

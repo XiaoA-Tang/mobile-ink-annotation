@@ -12,6 +12,7 @@ export type OverlayEngineEntry = {
   live: HTMLCanvasElement;
   committed: HTMLCanvasElement;
   pageEl: HTMLElement;
+  pageResizeObserver?: ResizeObserver | null;
 };
 
 export type ToolbarHost = {

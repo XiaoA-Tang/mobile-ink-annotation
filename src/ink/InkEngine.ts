@@ -454,8 +454,19 @@ export class InkEngine {
     if (!this.inputEnabled) return;
     if (!this.isEventInsideAnnotation(event)) return;
     if (event.touches.length > 1) {
-      if (this.activeTouchId !== null) {
-        this.finishInterruptedInput();
+      const changed = event.changedTouches.item(0);
+      const changedIsStylus = changed
+        ? (changed as Touch & { touchType?: string }).touchType === "stylus"
+        : false;
+      if (changedIsStylus) {
+        if (this.activeTouchId !== null || this.activePointerId !== null) {
+          this.finishInterruptedInput();
+        }
+        return;
+      }
+      if (this.activeTouchId !== null || this.activePointerId !== null || this.activeStroke !== null) {
+        event.preventDefault();
+        event.stopPropagation();
       }
       return;
     }
