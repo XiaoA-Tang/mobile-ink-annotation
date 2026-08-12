@@ -41,6 +41,15 @@ export class PdfOverlayAdapter {
   private retryBlockedUntil = 0;
   private unloaded = false;
 
+  private trackScrollEl: HTMLElement | null = null;
+  private trackResizeObserver: ResizeObserver | null = null;
+  private lastScrollLeft = 0;
+  private lastScrollTop = 0;
+  private lastWinWidth = window.innerWidth;
+  private lastWinHeight = window.innerHeight;
+  private trackingDirty = true;
+  private confirmRescanTimer: number | null = null;
+
   private penButtonRetryTimer: number | null = null;
   private penButtonRetryCount = 0;
   private readonly penButtonRetryMs = 250;
@@ -211,6 +220,15 @@ export class PdfOverlayAdapter {
       });
       this.toolbar.build(this.overlay);
       const scrollEl = containerEl.querySelector<HTMLElement>(".pdf-container") ?? containerEl;
+      this.trackScrollEl = scrollEl;
+      this.lastScrollLeft = scrollEl.scrollLeft;
+      this.lastScrollTop = scrollEl.scrollTop;
+      if (typeof ResizeObserver !== "undefined") {
+        this.trackResizeObserver = new ResizeObserver(() => {
+          this.trackingDirty = true;
+        });
+        this.trackResizeObserver.observe(scrollEl);
+      }
       this.gestureLock = new PdfGestureLock(scrollEl);
       this.toolbar.registerExtraButton({
         icon: "lock",
@@ -267,6 +285,26 @@ export class PdfOverlayAdapter {
     if (this.unloaded || !this.isActive) return;
     const containerEl = this.activeLeaf?.view.containerEl;
     if (!containerEl) return;
+
+    const scrollEl = this.trackScrollEl;
+    const scrollLeft = scrollEl?.scrollLeft ?? 0;
+    const scrollTop = scrollEl?.scrollTop ?? 0;
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    const moved = scrollLeft !== this.lastScrollLeft
+      || scrollTop !== this.lastScrollTop
+      || width !== this.lastWinWidth
+      || height !== this.lastWinHeight;
+    this.lastScrollLeft = scrollLeft;
+    this.lastScrollTop = scrollTop;
+    this.lastWinWidth = width;
+    this.lastWinHeight = height;
+    if (!this.trackingDirty && !moved) {
+      this.followFrame = window.requestAnimationFrame(this.followTick);
+      return;
+    }
+    this.trackingDirty = false;
+
     try {
       this.syncPageTracking(containerEl);
     } catch (error) {
@@ -312,7 +350,16 @@ export class PdfOverlayAdapter {
       }
       entry.rect = r;
     }
-    if (sizeChanged) this.sizeChangedAt = performance.now();
+    if (sizeChanged) {
+      this.sizeChangedAt = performance.now();
+      if (this.confirmRescanTimer === null) {
+        this.confirmRescanTimer = window.setTimeout(() => {
+          this.confirmRescanTimer = null;
+          if (this.unloaded || !this.isActive) return;
+          this.trackingDirty = true;
+        }, SETTLE_MS + 50);
+      }
+    }
 
     if (this.sizeChangedAt !== null && performance.now() - this.sizeChangedAt > SETTLE_MS) {
       this.sizeChangedAt = null;
@@ -403,18 +450,45 @@ export class PdfOverlayAdapter {
   private relayout(containerEl: HTMLElement): void {
     for (const entry of this.engines) entry.engine.setInputEnabled(false);
     for (const entry of this.engines) this.replacePageStrokes(entry.page.pageNumber);
-    for (const entry of this.engines) {
-      entry.engine.destroy();
-      entry.live.remove();
-      entry.committed.remove();
-    }
-    this.engines = [];
+
     const pages = this.getVisiblePages(containerEl);
-    for (const { el, pageNumber, rect } of pages) {
-      const page = this.layout?.pages[pageNumber - 1];
-      if (!page) continue;
-      this.createPageEngine(containerEl, el, page, rect);
+    const byPage = new Map<HTMLElement, { pageNumber: number; rect: ScreenRect }>();
+    for (const p of pages) byPage.set(p.el, { pageNumber: p.pageNumber, rect: p.rect });
+
+    for (const entry of Array.from(this.engines)) {
+      const match = byPage.get(entry.pageEl);
+      if (!match) {
+        entry.engine.destroy();
+        entry.live.remove();
+        entry.committed.remove();
+        this.engines.splice(this.engines.indexOf(entry), 1);
+        continue;
+      }
+      this.resizePageEngine(entry, match.rect);
     }
+
+    for (const p of pages) {
+      if (this.engines.some((e) => e.pageEl === p.el)) continue;
+      const page = this.layout?.pages[p.pageNumber - 1];
+      if (!page) continue;
+      this.createPageEngine(containerEl, p.el, page, p.rect);
+    }
+  }
+
+  private resizePageEngine(entry: OverlayEngineEntry, rect: ScreenRect): void {
+    const width = Math.max(1, Math.ceil(rect.width));
+    const height = Math.max(1, Math.ceil(rect.height));
+    const logical = this.pageStrokes.get(entry.page.pageNumber) ?? [];
+    entry.engine.resize(width, height);
+    entry.engine.setDisplayScale(1);
+    entry.engine.loadStrokes(convertStrokesToScreen(logical, entry.page, rect));
+    for (const c of [entry.live, entry.committed]) {
+      c.style.width = "100%";
+      c.style.height = "100%";
+    }
+    entry.rect = { ...rect };
+    entry.basisRect = { ...rect };
+    entry.engine.setInputEnabled(true);
   }
 
   private applyToolState(patch: Partial<InkToolState>): void {
@@ -460,6 +534,13 @@ export class PdfOverlayAdapter {
     this.panZoomLocked = false;
     this.blockZoomButtons?.(false);
     this.blockZoomButtons = null;
+    this.trackResizeObserver?.disconnect();
+    this.trackResizeObserver = null;
+    this.trackScrollEl = null;
+    if (this.confirmRescanTimer !== null) {
+      window.clearTimeout(this.confirmRescanTimer);
+      this.confirmRescanTimer = null;
+    }
     if (this.followFrame !== null) { window.cancelAnimationFrame(this.followFrame); this.followFrame = null; }
     this.sizeChangedAt = null;
     for (const entry of this.engines) {

@@ -29,6 +29,13 @@ type CanvasPointMapping = {
   scaleY: number;
 };
 
+type CanvasRectCache = {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+};
+
 export class InkEngine {
   private committedCtx: CanvasRenderingContext2D;
   private liveCtx: CanvasRenderingContext2D;
@@ -61,6 +68,7 @@ export class InkEngine {
   private displayScale = 1;
   private toolState: InkToolState = { ...DEFAULT_TOOL_STATE };
   private activeSmoothCount = 0;
+  private canvasRectCache: CanvasRectCache | null = null;
 
   constructor(
     private readonly liveCanvas: HTMLCanvasElement,
@@ -79,6 +87,7 @@ export class InkEngine {
     this.height = Math.max(1, Math.ceil(height));
     this.committedCtx = this.setupInkCanvas(this.committedCanvas, this.displayScale, false);
     this.liveCtx = this.setupInkCanvas(this.liveCanvas, this.displayScale, true);
+    this.canvasRectCache = null;
     this.predictedStrokeRendered = false;
     this.renderCommittedNow();
   }
@@ -90,6 +99,7 @@ export class InkEngine {
     this.displayScale = next;
     this.committedCtx = this.setupInkCanvas(this.committedCanvas, this.displayScale, false);
     this.liveCtx = this.setupInkCanvas(this.liveCanvas, this.displayScale, true);
+    this.canvasRectCache = null;
     this.liveCanvasDirty = true;
     this.renderCommittedNow();
     this.renderLiveNow();
@@ -118,6 +128,8 @@ export class InkEngine {
     document.removeEventListener("selectionchange", this.onDocumentSelectionChange);
     document.removeEventListener("pointerdown", this.onDocumentPointerProbe, true);
     document.removeEventListener("pointermove", this.onDocumentPointerProbe, true);
+    window.removeEventListener("scroll", this.onWindowScrollNav, true);
+    window.removeEventListener("resize", this.onWindowScrollNav);
 
     if (this.liveRenderRaf !== null) cancelAnimationFrame(this.liveRenderRaf);
     if (this.committedRenderRaf !== null) cancelAnimationFrame(this.committedRenderRaf);
@@ -242,6 +254,8 @@ export class InkEngine {
     document.addEventListener("selectionchange", this.onDocumentSelectionChange);
     document.addEventListener("pointerdown", this.onDocumentPointerProbe, { capture: true });
     document.addEventListener("pointermove", this.onDocumentPointerProbe, { capture: true });
+    window.addEventListener("scroll", this.onWindowScrollNav, { capture: true });
+    window.addEventListener("resize", this.onWindowScrollNav);
   }
 
   private setupInkCanvas(canvas: HTMLCanvasElement, displayScale: number, desynchronized: boolean): CanvasRenderingContext2D {
@@ -973,8 +987,25 @@ export class InkEngine {
     };
   }
 
+  private getCanvasRect(): CanvasRectCache {
+    if (!this.canvasRectCache) {
+      const rect = this.liveCanvas.getBoundingClientRect();
+      this.canvasRectCache = {
+        left: rect.left,
+        top: rect.top,
+        width: rect.width,
+        height: rect.height
+      };
+    }
+    return this.canvasRectCache;
+  }
+
+  private onWindowScrollNav = (): void => {
+    this.canvasRectCache = null;
+  };
+
   private getCanvasPointMapping(): CanvasPointMapping {
-    const rect = this.liveCanvas.getBoundingClientRect();
+    const rect = this.getCanvasRect();
     return {
       left: rect.left,
       top: rect.top,
@@ -984,8 +1015,8 @@ export class InkEngine {
   }
 
   private isClientInsideCanvas(clientX: number, clientY: number): boolean {
-    const rect = this.liveCanvas.getBoundingClientRect();
-    return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
+    const rect = this.getCanvasRect();
+    return clientX >= rect.left && clientX <= rect.left + rect.width && clientY >= rect.top && clientY <= rect.top + rect.height;
   }
 
   private isClientInsideInputRegion(clientX: number, clientY: number): boolean {
@@ -995,7 +1026,7 @@ export class InkEngine {
     const bounds = this.options.inputBounds;
     if (!bounds) return true;
 
-    const rect = this.liveCanvas.getBoundingClientRect();
+    const rect = this.getCanvasRect();
     const scaleY = this.height / Math.max(1, rect.height);
     const localY = (clientY - rect.top) * scaleY;
     const top = Math.max(0, Math.min(this.height, bounds.top));
@@ -1004,11 +1035,11 @@ export class InkEngine {
   }
 
   private isNearCanvas(clientX: number, clientY: number, margin: number): boolean {
-    const rect = this.liveCanvas.getBoundingClientRect();
+    const rect = this.getCanvasRect();
     return clientX >= rect.left - margin
-      && clientX <= rect.right + margin
+      && clientX <= rect.left + rect.width + margin
       && clientY >= rect.top - margin
-      && clientY <= rect.bottom + margin;
+      && clientY <= rect.top + rect.height + margin;
   }
 
   private isEventInsideAnnotation(event: Event): boolean {
