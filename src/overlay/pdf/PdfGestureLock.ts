@@ -4,6 +4,7 @@ export class PdfGestureLock {
   private locked = false;
   private singleTouchStart: { x: number; y: number } | null = null;
   private readonly scrollEl: HTMLElement;
+  private savedTouchAction: string | null = null;
 
   constructor(scrollEl: HTMLElement) {
     this.scrollEl = scrollEl;
@@ -22,12 +23,18 @@ export class PdfGestureLock {
   }
 
   private attach(): void {
+    this.savedTouchAction = this.scrollEl.style.touchAction;
+    this.scrollEl.style.touchAction = "pan-y";
     this.scrollEl.addEventListener("wheel", this.onWheel, { passive: false });
     this.scrollEl.addEventListener("touchstart", this.onTouchStart, { passive: false });
     this.scrollEl.addEventListener("touchmove", this.onTouchMove, { passive: false, capture: true });
   }
 
   private detach(): void {
+    if (this.savedTouchAction !== null) {
+      this.scrollEl.style.touchAction = this.savedTouchAction;
+      this.savedTouchAction = null;
+    }
     this.scrollEl.removeEventListener("wheel", this.onWheel);
     this.scrollEl.removeEventListener("touchstart", this.onTouchStart);
     this.scrollEl.removeEventListener("touchmove", this.onTouchMove, { capture: true });

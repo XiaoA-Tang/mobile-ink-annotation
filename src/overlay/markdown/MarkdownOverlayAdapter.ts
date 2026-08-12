@@ -200,7 +200,7 @@ export class MarkdownOverlayAdapter {
     const scale = mdLoadScale(annotation, this.pageWidth);
     this.strokes = convertStrokesFromAnnotation(annotation.strokes, scale);
 
-    this.overlay = this.containerEl.createDiv({ cls: MARKDOWN_OVERLAY_CLS, attr: { "aria-hidden": "true" } });
+    this.overlay = this.containerEl.createDiv({ cls: `${MARKDOWN_OVERLAY_CLS} mobile-ink-native-overlay`, attr: { "aria-hidden": "true" } });
 
     this.toolkit = new OverlayToolkit(
       { app: this.app, store: this.store },
