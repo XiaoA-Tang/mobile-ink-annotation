@@ -1,7 +1,7 @@
 import { App, Notice, Plugin, PluginSettingTab } from "obsidian";
 import { StrokeStore } from "./ink/StrokeStore";
 import { VIEW_TYPE_MOBILE_INK } from "./constants";
-import { probeNativePdfStructure } from "./pdf/nativePdfProbe";
+import { probeNativePdfStructure, probeZoomMechanism } from "./pdf/nativePdfProbe";
 import { PdfOverlayAdapter } from "./overlay/pdf/PdfOverlayAdapter";
 import { MarkdownOverlayAdapter } from "./overlay/markdown/MarkdownOverlayAdapter";
 
@@ -52,6 +52,23 @@ export default class MobileInkAnnotationPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: "probe-native-pdf-zoom",
+      name: "探测原生 PDF 缩放机制 (SPIKE)",
+      checkCallback: (checking) => {
+        const leaf = this.app.workspace.activeLeaf;
+        const ok = !!leaf && leaf.getViewState().type === "pdf";
+        if (checking) return ok;
+        if (!ok || !leaf) return false;
+        const result = probeZoomMechanism(leaf);
+        const text = JSON.stringify(result, null, 2);
+        void this.appendProbeToNote("pdf-zoom-probe", text)
+          .then((notePath) => new Notice(`缩放探测完成: 滚动容器=${result.scrollContainer?.tag ?? "无"}/${(result.scrollContainer?.classes ?? []).join(".") || "无类"}, 页数=${result.pages.length}。已写入 ${notePath}，请全选复制发给开发者`))
+          .catch((e) => new Notice("探测写入失败: " + String(e)));
+        return true;
+      }
+    });
+
+    this.addCommand({
       id: "dump-native-overlay-diagnostics",
       name: "导出原生覆盖层诊断日志到笔记 (调试)",
       checkCallback: (checking) => {
@@ -68,6 +85,15 @@ export default class MobileInkAnnotationPlugin extends Plugin {
     });
 
     this.addSettingTab(new MobileInkAnnotationSettingTab(this.app, this));
+  }
+
+  private async appendProbeToNote(name: string, jsonText: string): Promise<string> {
+    const notePath = `mobile-ink-${name}.md`;
+    const stamp = new Date().toLocaleString();
+    const block = `## ${stamp}\n\n\`\`\`json\n${jsonText}\n\`\`\`\n\n`;
+    const existing = await this.app.vault.adapter.read(notePath).catch(() => "");
+    await this.app.vault.adapter.write(notePath, existing + block);
+    return notePath;
   }
 
   onunload(): void {
