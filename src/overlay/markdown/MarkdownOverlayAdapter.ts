@@ -134,8 +134,7 @@ export class MarkdownOverlayAdapter {
 
     this.activeLeaf = leaf;
     this.drawFile = file;
-    this.containerEl = leaf.view.containerEl;
-    const preview = this.containerEl.querySelector<HTMLElement>(".markdown-preview-view");
+    const preview = leaf.view.containerEl.querySelector<HTMLElement>(".markdown-preview-view");
     if (!preview) {
       this.activeLeaf = null;
       this.drawFile = null;
@@ -173,7 +172,7 @@ export class MarkdownOverlayAdapter {
 
     // 关键：InkEngine 的“注解根”必须包含 canvas（isNodeInsideAnnotation/手势拦截都基于它），
     // 必须传 containerEl 而非滚动容器，否则所有指针事件会被判定为“注解区域外”而忽略。
-    this.engine = new InkEngine(this.liveCanvas, this.committedCanvas, this.containerEl, {
+    this.engine = new InkEngine(this.liveCanvas, this.committedCanvas, this.containerEl!, {
       initialToolState: { ...this.toolkit!.toolState },
       canvasMaxDpr: 3,
       canvasMaxPixels: resolveInkCanvasBudget(Platform.isMobile),

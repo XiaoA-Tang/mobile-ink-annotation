@@ -496,8 +496,7 @@ export class PdfOverlayAdapter {
 
   private async deactivateOverlay(): Promise<void> {
     const token = ++this.teardownToken;
-    const leaf = this.activeLeaf;
-    const containerEl = leaf?.view.containerEl;
+    const containerEl = this.activeLeaf?.view.containerEl;
     this.activeLeaf = null;
     for (const entry of this.engines) entry.engine.setInputEnabled(false);
     await this.toolkit?.flush();

@@ -42,8 +42,11 @@ export class OverlayToolbar {
     });
     setIcon(collapsedPen, "pencil");
     collapsedPen.addEventListener("click", () => {
-      this.host.onPenExpand?.();
-      this.setCollapsed(false);
+      if (this.host.onPenExpand) {
+        this.host.onPenExpand();
+      } else {
+        this.setCollapsed(false);
+      }
     });
     this.collapsedPenEl = collapsedPen;
 
@@ -94,8 +97,11 @@ export class OverlayToolbar {
     });
     setIcon(collapseBtn, "chevron-down");
     collapseBtn.addEventListener("click", () => {
-      this.host.onCollapse?.();
-      this.setCollapsed(true);
+      if (this.host.onCollapse) {
+        this.host.onCollapse();
+      } else {
+        this.setCollapsed(true);
+      }
     });
     this.buttonsMap.collapse = collapseBtn;
 
