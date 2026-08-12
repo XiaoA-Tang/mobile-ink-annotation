@@ -10,6 +10,8 @@ export class OverlayToolbar {
   private swatchEl: HTMLElement | null = null;
   private extraButtons: Array<{ spec: { icon: string; label: string; isActive(): boolean; onClick(): void }; el: HTMLElement | null }> = [];
   private extraGroup: HTMLElement | null = null;
+  private collapsedPenEl: HTMLElement | null = null;
+  private collapseGroup: HTMLElement | null = null;
 
   constructor(private readonly host: ToolbarHost) {}
 
@@ -33,6 +35,17 @@ export class OverlayToolbar {
     const bar = overlay.createDiv({ cls: "mobile-ink-native-toolbar" });
     this.toolbarEl = bar;
     const dock = bar.createDiv({ cls: "mobile-ink-toolbar-dock" });
+
+    const collapsedPen = bar.createEl("button", {
+      cls: "mobile-ink-icon-button mobile-ink-collapsed-pen",
+      attr: { "aria-label": "手写批注" }
+    });
+    setIcon(collapsedPen, "pencil");
+    collapsedPen.addEventListener("click", () => {
+      this.host.onPenExpand?.();
+      this.setCollapsed(false);
+    });
+    this.collapsedPenEl = collapsedPen;
 
     const addToolButton = (key: string, icon: string, label: string, action: () => void, group: HTMLElement): void => {
       const btn = group.createEl("button", {
@@ -73,6 +86,19 @@ export class OverlayToolbar {
     addIconButton("undo", "undo-2", "撤销", () => { this.host.onUndo(); this.refresh(); }, historyGroup);
     addIconButton("redo", "redo-2", "重做", () => { this.host.onRedo(); this.refresh(); }, historyGroup);
 
+    const collapseGroup = dock.createDiv({ cls: "mobile-ink-toolbar-group" });
+    this.collapseGroup = collapseGroup;
+    const collapseBtn = collapseGroup.createEl("button", {
+      cls: "mobile-ink-icon-button",
+      attr: { "aria-label": "收起" }
+    });
+    setIcon(collapseBtn, "chevron-down");
+    collapseBtn.addEventListener("click", () => {
+      this.host.onCollapse?.();
+      this.setCollapsed(true);
+    });
+    this.buttonsMap.collapse = collapseBtn;
+
     for (const entry of this.extraButtons) this.mountExtraButton(entry);
 
     this.refresh();
@@ -103,7 +129,10 @@ export class OverlayToolbar {
   private mountExtraButton(entry: { spec: { icon: string; label: string; isActive(): boolean; onClick(): void }; el: HTMLElement | null }): void {
     if (!this.toolbarEl) return;
     if (!this.extraGroup) {
-      this.extraGroup = this.toolbarEl.querySelector<HTMLElement>(".mobile-ink-toolbar-dock")?.createDiv({ cls: "mobile-ink-toolbar-group" }) ?? null;
+      const dock = this.toolbarEl.querySelector<HTMLElement>(".mobile-ink-toolbar-dock");
+      if (!dock) return;
+      this.extraGroup = dock.createDiv({ cls: "mobile-ink-toolbar-group" });
+      if (this.collapseGroup) dock.insertBefore(this.extraGroup, this.collapseGroup);
     }
     if (!this.extraGroup) return;
     const btn = this.extraGroup.createEl("button", {
@@ -126,6 +155,8 @@ export class OverlayToolbar {
     this.colorDot = null;
     this.extraButtons = [];
     this.extraGroup = null;
+    this.collapsedPenEl = null;
+    this.collapseGroup = null;
   }
 
   private currentInkColor(state: InkToolState): string {
