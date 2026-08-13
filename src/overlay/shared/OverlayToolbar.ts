@@ -215,14 +215,16 @@ export class OverlayToolbar {
     });
     customInput.style.display = "none";
     customBtn.addEventListener("click", () => customInput.click());
-    customInput.addEventListener("input", () => {
+    const onCustomColorChange = (): void => {
       const val = customInput.value;
       if (isHighlighter) this.host.applyToolState({ highlighterColor: val });
       else this.host.applyToolState({ color: val });
       grid.querySelectorAll(".mobile-ink-swatch-gn-cell.is-active").forEach((el) => el.classList.remove("is-active"));
       customBtn.style.setProperty("--mobile-ink-custom-color", val);
       this.refresh();
-    });
+    };
+    customInput.addEventListener("input", onCustomColorChange);
+    customInput.addEventListener("change", onCustomColorChange);
 
     this.swatchEl = panel;
     panel.addEventListener("click", (e) => e.stopPropagation());
@@ -307,7 +309,10 @@ export class OverlayToolbar {
       dragging = false;
       thumb.releasePointerCapture(e.pointerId);
     });
-    // 点轨道跳转
+    thumb.addEventListener("pointercancel", (e) => {
+      dragging = false;
+      thumb.releasePointerCapture(e.pointerId);
+    });
     track.addEventListener("pointerdown", (e) => {
       if (e.target === thumb) return;
       dragging = true;
