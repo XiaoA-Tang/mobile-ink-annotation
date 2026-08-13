@@ -207,7 +207,8 @@ private openColorSwatch(anchor: HTMLElement): void {
   const overlay = this.host.getOverlay();
   if (!overlay) return;
   const state = this.host.getToolState();
-  const current = state.tool === "highlighter" ? state.highlighterColor : state.color;
+  const isHighlighter = state.tool === "highlighter";
+  const current = isHighlighter ? state.highlighterColor : state.color;
 
   anchor.classList.add("mobile-ink-active");
 
@@ -216,7 +217,7 @@ private openColorSwatch(anchor: HTMLElement): void {
   titleRow.createDiv({ cls: "mobile-ink-swatch-title", text: "颜色" });
 
   const grid = panel.createDiv({ cls: "mobile-ink-swatch-gn-grid" });
-  for (const color of COLOR_PRIMARIES) { // <- 改 import，用 GN_COLOR_PALETTE
+  for (const color of GN_COLOR_PALETTE) {
     const sw = grid.createEl("button", {
       cls: "mobile-ink-swatch-gn-cell",
       attr: { "aria-label": color }
@@ -226,7 +227,7 @@ private openColorSwatch(anchor: HTMLElement): void {
       sw.classList.add("is-active");
     }
     sw.addEventListener("click", () => {
-      if (state.tool === "highlighter") this.host.applyToolState({ highlighterColor: color });
+      if (isHighlighter) this.host.applyToolState({ highlighterColor: color });
       else this.host.applyToolState({ color });
       grid.querySelectorAll(".mobile-ink-swatch-gn-cell.is-active").forEach((el) => el.classList.remove("is-active"));
       sw.classList.add("is-active");
@@ -249,10 +250,10 @@ private openColorSwatch(anchor: HTMLElement): void {
   customBtn.addEventListener("click", () => customInput.click());
   customInput.addEventListener("input", () => {
     const val = customInput.value;
-    if (state.tool === "highlighter") this.host.applyToolState({ highlighterColor: val });
+    if (isHighlighter) this.host.applyToolState({ highlighterColor: val });
     else this.host.applyToolState({ color: val });
     grid.querySelectorAll(".mobile-ink-swatch-gn-cell.is-active").forEach((el) => el.classList.remove("is-active"));
-    customBtn.style.background = val;
+    customBtn.style.setProperty("--mobile-ink-custom-color", val);
     this.refresh();
   });
 
@@ -263,7 +264,7 @@ private openColorSwatch(anchor: HTMLElement): void {
 }
 ```
 
-注意：从 `OverlayToolkit` import `GN_COLOR_PALETTE`（替换对 `COLOR_PRIMARIES`/`COLOR_SHADES` 的依赖——`renderShades` 方法不再需要，但方法保留不删，以免其他地方用）。
+注意：`GN_COLOR_PALETTE` 从 `OverlayToolkit` import；原来 `COLOR_PRIMARIES`/`COLOR_SHADES` 的依赖全部移除（`openColorSwatch` 不再引用；`renderShades` 方法一并删除，`COLOR_SHADES`/`COLOR_PRIMARIES` 不再被 OverlayToolbar 使用，import 对应清理；若 `COLOR_SHADES`/`COLOR_PRIMARIES` 在 codebase 其他处仍被引用则保留 Toolkit 导出）。
 
 - [ ] **Step 3: CSS GoodNotes 风格色板**
 
@@ -357,7 +358,7 @@ private openColorSwatch(anchor: HTMLElement): void {
   height: 32px;
   border-radius: 50%;
   border: 2px solid var(--background-modifier-border);
-  background: conic-gradient(#ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000);
+  background: var(--mobile-ink-custom-color, conic-gradient(#ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000));
   cursor: pointer;
   padding: 0;
   position: relative;
@@ -447,22 +448,26 @@ private openWidthSwatch(): void {
   const divider = panel.createDiv({ cls: "mobile-ink-swatch-gn-divider" });
 
   const presetRow = panel.createDiv({ cls: "mobile-ink-swatch-gn-preset-row" });
+
+  const syncPresetHighlight = (w: number): void => {
+    presetRow.querySelectorAll<HTMLElement>(".mobile-ink-swatch-gn-preset").forEach((el) => {
+      el.classList.toggle("is-active", Number(el.dataset.width) === w);
+    });
+  };
+
   const apply = (w: number): void => {
     const clamped = Math.max(WIDTH_MIN, Math.min(WIDTH_MAX, Math.round(w)));
     valueEl.textContent = `${clamped} pt`;
     fill.style.width = `${((clamped - WIDTH_MIN) / (WIDTH_MAX - WIDTH_MIN)) * 100}%`;
     thumb.style.left = `${((clamped - WIDTH_MIN) / (WIDTH_MAX - WIDTH_MIN)) * 100}%`;
     previewLine.style.height = `${clamped}px`;
+    syncPresetHighlight(clamped);
     if (isHighlighter) this.host.applyToolState({ highlighterWidth: clamped });
     else this.host.applyToolState({ width: clamped });
-    presetRow.querySelectorAll(".mobile-ink-swatch-gn-preset.is-active").forEach((el) => el.classList.remove("is-active"));
   };
 
   const previewWrap = panel.createDiv({ cls: "mobile-ink-swatch-gn-preview-row" });
   const previewLine = previewWrap.createDiv({ cls: "mobile-ink-swatch-gn-preview-line" });
-  previewLine.style.height = `${current}px`;
-  fill.style.width = `${((current - WIDTH_MIN) / (WIDTH_MAX - WIDTH_MIN)) * 100}%`;
-  thumb.style.left = `${((current - WIDTH_MIN) / (WIDTH_MAX - WIDTH_MIN)) * 100}%`;
 
   // 预设按钮
   for (const w of WIDTH_PRESETS) {
@@ -473,9 +478,10 @@ private openWidthSwatch(): void {
     const line = btn.createDiv({ cls: "mobile-ink-swatch-gn-preset-line" });
     line.style.height = `${Math.max(1, Math.min(10, w))}px`;
     btn.createDiv({ cls: "mobile-ink-swatch-gn-preset-num", text: `${w}` });
-    if (Math.round(current) === w) btn.classList.add("is-active");
     btn.addEventListener("click", () => apply(w));
   }
+
+  apply(current);
 
   // 滑块拖动
   let dragging = false;
