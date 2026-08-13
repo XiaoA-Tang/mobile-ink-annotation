@@ -25,7 +25,6 @@
 **交互：**
 - 点击色点 → 立即应用颜色，面板保持打开（不自动关闭），选中色点有白圈 + 外圈高光（GoodNotes 风格）
 - 点击外部或再次点颜色按钮 → 关闭面板
-- 不透明度滑块：实时改变当前工具的不透明度，thumb 跟随拖动
 - 取色器点击 → 打开系统原生颜色选择器
 
 **颜色列表（18 色），每行 6 色：**
@@ -100,7 +99,7 @@
 ### 4. 代码改动范围
 
 - `src/overlay/shared/OverlayToolbar.ts`
-  - `openColorSwatch()` 重写：18 色网格 + 取色器 + 不透明度滑块
+  - `openColorSwatch()` 重写：18 色网格 + 取色器
   - `openWidthSwatch()` 重写：大滑块 + 预设圆形按钮
   - 面板打开/关闭时给颜色按钮/粗细按钮切换 `is-active` class
 - `src/overlay/shared/OverlayToolkit.ts` — 暂不改（不加不透明度）
