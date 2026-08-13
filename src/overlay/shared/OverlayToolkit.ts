@@ -4,7 +4,7 @@ import type { OverlayHost } from "./types";
 
 export const WIDTH_MIN = 1;
 export const WIDTH_MAX = 14;
-export const WIDTH_PRESETS = [2, 3, 5, 8];
+export const WIDTH_PRESETS = [1, 3, 5, 8, 12];
 
 export const COLOR_PRIMARIES = ["#111111", "#e53935", "#1e88e5", "#43a047", "#ffb300", "#8e24aa", "#ffffff"];
 

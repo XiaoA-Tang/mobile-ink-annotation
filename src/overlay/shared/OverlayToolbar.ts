@@ -234,64 +234,87 @@ export class OverlayToolbar {
     this.closeSwatch();
     const overlay = this.host.getOverlay();
     if (!overlay) return;
-    this.buttonsMap.width?.classList.add("mobile-ink-active");
-    const anchor = this.host.getWidthAnchor();
     const state = this.host.getToolState();
     const isHighlighter = state.tool === "highlighter";
     const current = isHighlighter ? state.highlighterWidth : state.width;
 
+    const anchor = this.host.getWidthAnchor();
+    if (anchor) anchor.classList.add("mobile-ink-active");
+
     const panel = overlay.createDiv({ cls: "mobile-ink-swatch-panel" });
+
     const titleRow = panel.createDiv({ cls: "mobile-ink-swatch-title-row" });
-    titleRow.createDiv({ cls: "mobile-ink-swatch-title", text: isHighlighter ? "记号笔粗细" : "线条粗细" });
-    const valueEl = titleRow.createDiv({ cls: "mobile-ink-swatch-width-value", text: `${current}` });
+    titleRow.createDiv({ cls: "mobile-ink-swatch-title", text: "线条粗细" });
+    const valueEl = titleRow.createDiv({ cls: "mobile-ink-swatch-gn-width-value", text: `${current} pt` });
+
+    const sliderWrap = panel.createDiv({ cls: "mobile-ink-swatch-gn-slider-wrap" });
+    const track = sliderWrap.createDiv({ cls: "mobile-ink-swatch-gn-slider-track" });
+    const fill = track.createDiv({ cls: "mobile-ink-swatch-gn-slider-fill" });
+    const thumb = track.createDiv({ cls: "mobile-ink-swatch-gn-slider-thumb" });
+
+    const divider = panel.createDiv({ cls: "mobile-ink-swatch-gn-divider" });
+
+    const presetRow = panel.createDiv({ cls: "mobile-ink-swatch-gn-preset-row" });
+
+    const syncPresetHighlight = (w: number): void => {
+      presetRow.querySelectorAll<HTMLElement>(".mobile-ink-swatch-gn-preset").forEach((el) => {
+        el.classList.toggle("is-active", Number(el.dataset.width) === w);
+      });
+    };
 
     const apply = (w: number): void => {
       const clamped = Math.max(WIDTH_MIN, Math.min(WIDTH_MAX, Math.round(w)));
-      valueEl.textContent = `${clamped}`;
-      preview.style.height = `${clamped}px`;
+      valueEl.textContent = `${clamped} pt`;
+      fill.style.width = `${((clamped - WIDTH_MIN) / (WIDTH_MAX - WIDTH_MIN)) * 100}%`;
+      thumb.style.left = `${((clamped - WIDTH_MIN) / (WIDTH_MAX - WIDTH_MIN)) * 100}%`;
+      previewLine.style.height = `${clamped}px`;
+      syncPresetHighlight(clamped);
       if (isHighlighter) this.host.applyToolState({ highlighterWidth: clamped });
       else this.host.applyToolState({ width: clamped });
     };
 
-    const target = document.createElement("input");
-    target.type = "range";
-    target.min = String(WIDTH_MIN);
-    target.max = String(WIDTH_MAX);
-    target.step = "1";
-    target.value = String(Math.max(WIDTH_MIN, Math.min(WIDTH_MAX, Math.round(current))));
-    target.className = "mobile-ink-swatch-width-slider";
+    const previewWrap = panel.createDiv({ cls: "mobile-ink-swatch-gn-preview-row" });
+    const previewLine = previewWrap.createDiv({ cls: "mobile-ink-swatch-gn-preview-line" });
 
-    const syncPresetHighlight = (): void => {
-      const w = Math.max(WIDTH_MIN, Math.min(WIDTH_MAX, Math.round(Number(target.value))));
-      presets.querySelectorAll(".mobile-ink-swatch-width-preset.is-active").forEach((el) => el.classList.remove("is-active"));
-      presets.querySelectorAll<HTMLElement>(".mobile-ink-swatch-width-preset").forEach((el) => {
-        if (Number(el.dataset.width) === w) el.classList.add("is-active");
-      });
-    };
-
-    target.addEventListener("input", () => {
-      apply(Number(target.value));
-      syncPresetHighlight();
-    });
-    panel.appendChild(target);
-
-    const preview = panel.createDiv({ cls: "mobile-ink-swatch-width-preview-line" });
-
-    const presets = panel.createDiv({ cls: "mobile-ink-swatch-width-presets" });
     for (const w of WIDTH_PRESETS) {
-      const btn = presets.createEl("button", { cls: "mobile-ink-swatch-width-preset", attr: { "aria-label": `${w}`, "data-width": `${w}` } });
-      const line = btn.createDiv({ cls: "mobile-ink-swatch-width-preview" });
-      line.style.height = `${w}px`;
-      btn.createDiv({ cls: "mobile-ink-swatch-width-label", text: `${w}` });
-      if (Math.round(current) === w) btn.classList.add("is-active");
-      btn.addEventListener("click", () => {
-        target.value = String(w);
-        apply(w);
-        syncPresetHighlight();
+      const btn = presetRow.createEl("button", {
+        cls: "mobile-ink-swatch-gn-preset",
+        attr: { "aria-label": `${w}`, "data-width": `${w}` }
       });
+      const line = btn.createDiv({ cls: "mobile-ink-swatch-gn-preset-line" });
+      line.style.height = `${Math.max(1, Math.min(10, w))}px`;
+      btn.createDiv({ cls: "mobile-ink-swatch-gn-preset-num", text: `${w}` });
+      btn.addEventListener("click", () => apply(w));
     }
 
     apply(current);
+
+    let dragging = false;
+    const onMove = (clientX: number): void => {
+      if (!dragging) return;
+      const rect = track.getBoundingClientRect();
+      const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      const w = WIDTH_MIN + ratio * (WIDTH_MAX - WIDTH_MIN);
+      apply(w);
+    };
+    thumb.addEventListener("pointerdown", (e) => {
+      dragging = true;
+      thumb.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    });
+    thumb.addEventListener("pointermove", (e) => onMove(e.clientX));
+    thumb.addEventListener("pointerup", (e) => {
+      dragging = false;
+      thumb.releasePointerCapture(e.pointerId);
+    });
+    // 点轨道跳转
+    track.addEventListener("pointerdown", (e) => {
+      if (e.target === thumb) return;
+      dragging = true;
+      thumb.setPointerCapture(e.pointerId);
+      onMove(e.clientX);
+      e.preventDefault();
+    });
 
     this.swatchEl = panel;
     panel.addEventListener("click", (e) => e.stopPropagation());
