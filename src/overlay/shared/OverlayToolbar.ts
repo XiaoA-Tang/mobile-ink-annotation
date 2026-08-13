@@ -173,6 +173,7 @@ export class OverlayToolbar {
     this.closeSwatch();
     const overlay = this.host.getOverlay();
     if (!overlay) return;
+    anchor.classList.add("mobile-ink-active");
     const state = this.host.getToolState();
     const isHighlighter = state.tool === "highlighter";
     const current = isHighlighter ? state.highlighterColor : state.color;
@@ -237,6 +238,7 @@ export class OverlayToolbar {
     this.closeSwatch();
     const overlay = this.host.getOverlay();
     if (!overlay) return;
+    this.buttonsMap.width?.classList.add("mobile-ink-active");
     const anchor = this.host.getWidthAnchor();
     const state = this.host.getToolState();
     const isHighlighter = state.tool === "highlighter";
@@ -331,6 +333,8 @@ export class OverlayToolbar {
   }
 
   private closeSwatch(): void {
+    this.buttonsMap.color?.classList.remove("mobile-ink-active");
+    this.buttonsMap.width?.classList.remove("mobile-ink-active");
     this.swatchEl?.remove();
     this.swatchEl = null;
   }
