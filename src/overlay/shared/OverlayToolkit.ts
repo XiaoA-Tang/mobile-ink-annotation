@@ -18,6 +18,12 @@ export const COLOR_SHADES: Record<string, string[]> = {
   "#ffffff": ["#ffffff", "#f5f5f5", "#eeeeee", "#e0e0e0", "#bdbdbd"]
 };
 
+export const GN_COLOR_PALETTE = [
+  "#111111", "#333333", "#666666", "#999999", "#cccccc", "#ffffff",
+  "#e53935", "#ff7043", "#ffb300", "#fdd835", "#43a047", "#00acc1",
+  "#1e88e5", "#3949ab", "#8e24aa", "#ec407a", "#6d4c41", "#d7ccc8"
+];
+
 export class OverlayToolkit {
   toolState: InkToolState = {
     tool: "pen", color: "#111111", width: 2,

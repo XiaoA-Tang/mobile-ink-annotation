@@ -1,7 +1,7 @@
 import { setIcon } from "obsidian";
 import type { InkToolState } from "../../ink/types";
 import type { ToolbarHost } from "./types";
-import { COLOR_PRIMARIES, COLOR_SHADES, WIDTH_MAX, WIDTH_MIN, WIDTH_PRESETS } from "./OverlayToolkit";
+import { GN_COLOR_PALETTE, WIDTH_MAX, WIDTH_MIN, WIDTH_PRESETS } from "./OverlayToolkit";
 
 export class OverlayToolbar {
   private toolbarEl: HTMLElement | null = null;
@@ -173,65 +173,61 @@ export class OverlayToolbar {
     this.closeSwatch();
     const overlay = this.host.getOverlay();
     if (!overlay) return;
-    anchor.classList.add("mobile-ink-active");
     const state = this.host.getToolState();
     const isHighlighter = state.tool === "highlighter";
     const current = isHighlighter ? state.highlighterColor : state.color;
 
+    anchor.classList.add("mobile-ink-active");
+
     const panel = overlay.createDiv({ cls: "mobile-ink-swatch-panel" });
     const titleRow = panel.createDiv({ cls: "mobile-ink-swatch-title-row" });
-    titleRow.createDiv({ cls: "mobile-ink-swatch-title", text: isHighlighter ? "记号笔颜色" : "颜色" });
-    const currentDot = titleRow.createDiv({ cls: "mobile-ink-swatch-current-dot" });
-    currentDot.style.background = current;
+    titleRow.createDiv({ cls: "mobile-ink-swatch-title", text: "颜色" });
 
-    const apply = (color: string): void => {
-      if (isHighlighter) this.host.applyToolState({ highlighterColor: color });
-      else this.host.applyToolState({ color });
-      this.closeSwatch();
-    };
-
-    const matched = COLOR_PRIMARIES.find((p) => (COLOR_SHADES[p] ?? []).includes(current));
-    let selectedPrimary = matched ?? "#111111";
-
-    const primaryRow = panel.createDiv({ cls: "mobile-ink-swatch-primary-row" });
-    for (const color of COLOR_PRIMARIES) {
-      const sw = primaryRow.createEl("button", { cls: "mobile-ink-swatch-cell", attr: { "aria-label": color } });
+    const grid = panel.createDiv({ cls: "mobile-ink-swatch-gn-grid" });
+    for (const color of GN_COLOR_PALETTE) {
+      const sw = grid.createEl("button", {
+        cls: "mobile-ink-swatch-gn-cell",
+        attr: { "aria-label": color }
+      });
       sw.style.background = color;
-      if (color === selectedPrimary && matched) sw.classList.add("is-active");
-      sw.addEventListener("click", () => {
-        selectedPrimary = color;
-        this.renderShades(shadesEl, color, current, apply);
-        primaryRow.querySelectorAll(".mobile-ink-swatch-cell.is-active").forEach((el) => el.classList.remove("is-active"));
+      if (color.toLowerCase() === current.toLowerCase()) {
         sw.classList.add("is-active");
+      }
+      sw.addEventListener("click", () => {
+        if (isHighlighter) this.host.applyToolState({ highlighterColor: color });
+        else this.host.applyToolState({ color });
+        grid.querySelectorAll(".mobile-ink-swatch-gn-cell.is-active").forEach((el) => el.classList.remove("is-active"));
+        sw.classList.add("is-active");
+        this.refresh();
       });
     }
 
-    const shadesEl = panel.createDiv({ cls: "mobile-ink-swatch-shades" });
-    this.renderShades(shadesEl, selectedPrimary, current, apply);
+    const divider = panel.createDiv({ cls: "mobile-ink-swatch-gn-divider" });
 
-    const customRow = panel.createDiv({ cls: "mobile-ink-swatch-custom" });
+    const customRow = panel.createDiv({ cls: "mobile-ink-swatch-gn-custom-row" });
+    const customBtn = customRow.createEl("button", {
+      cls: "mobile-ink-swatch-gn-custom-btn",
+      attr: { "aria-label": "自定义颜色" }
+    });
     const customInput = customRow.createEl("input", {
       type: "color",
-      value: current.startsWith("#") && current.length === 7 ? current : "#111111"
+      attr: { value: current.startsWith("#") && current.length === 7 ? current : "#111111" }
     });
-    const applyBtn = customRow.createEl("button", { cls: "mobile-ink-swatch-apply", text: "应用" });
-    applyBtn.addEventListener("click", () => apply(customInput.value));
+    customInput.style.display = "none";
+    customBtn.addEventListener("click", () => customInput.click());
+    customInput.addEventListener("input", () => {
+      const val = customInput.value;
+      if (isHighlighter) this.host.applyToolState({ highlighterColor: val });
+      else this.host.applyToolState({ color: val });
+      grid.querySelectorAll(".mobile-ink-swatch-gn-cell.is-active").forEach((el) => el.classList.remove("is-active"));
+      customBtn.style.setProperty("--mobile-ink-custom-color", val);
+      this.refresh();
+    });
 
     this.swatchEl = panel;
     panel.addEventListener("click", (e) => e.stopPropagation());
     this.positionSwatch(panel, anchor);
     this.registerSwatchOutsideClose(panel);
-  }
-
-  private renderShades(container: HTMLElement, primary: string, current: string, apply: (c: string) => void): void {
-    container.empty();
-    const shades = COLOR_SHADES[primary] ?? COLOR_SHADES["#111111"];
-    for (const color of shades) {
-      const sw = container.createEl("button", { cls: "mobile-ink-swatch-cell mobile-ink-swatch-shade-cell", attr: { "aria-label": color } });
-      sw.style.background = color;
-      if (color === current) sw.classList.add("is-active");
-      sw.addEventListener("click", () => apply(color));
-    }
   }
 
   private openWidthSwatch(): void {
